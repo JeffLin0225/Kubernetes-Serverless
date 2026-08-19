@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: serverless-system-quotas
+  namespace: default
+data:
+  # 爬蟲系統
+  crawler.cpu_request: "250m"
+  crawler.memory_request: "512Mi"
+  crawler.cpu_limit: "500m"
+  crawler.memory_limit: "1Gi"
+
+  # 報表系統
+  reporting.cpu_request: "1000m"
+  reporting.memory_request: "2Gi"
+  reporting.cpu_limit: "2000m"
+  reporting.memory_limit: "4Gi"
+
+  # 資料分析系統
+  analytics.cpu_request: "2000m"
+  analytics.memory_request: "4Gi"
+  analytics.cpu_limit: "4000m"
+  analytics.memory_limit: "8Gi"
