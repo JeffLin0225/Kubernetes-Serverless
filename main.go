@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-
+ 
 	// 載入設定檔物件
 	cfg := config.LoadConfig()
 
