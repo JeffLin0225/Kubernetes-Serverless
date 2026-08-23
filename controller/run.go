@@ -28,12 +28,19 @@ func (ctrl *RunController) HandleRun(c *gin.Context) {
 		return
 	}
 
-	// 呼叫 Service 執行 K8s 操作（先前寫好的邏輯完全相容）
-	_ = ctrl.kubeCli
+	// 呼叫 Service 執行 K8s 操作
+	job, err := ctrl.kubeCli.CreateJob(c.Request.Context(), req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"status": "error",
+			"error":  "建立 Job 失敗: " + err.Error(),
+		})
+		return
+	}
 
 	c.JSON(http.StatusOK, model.RunResponse{
 		Status:  "ok",
-		Message: "已成功接收 FlowRunID:" + req.FlowRunID,
+		Message: "已成功接收 TaskID:" + req.TaskID,
+		JobName: job.Name,
 	})
-
 }
