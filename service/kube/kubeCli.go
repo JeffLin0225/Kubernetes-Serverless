@@ -3,9 +3,9 @@ package kube
 import (
 	"context"
 	"fmt"
-	"log"
 	"kubernetes-serverless/config"
 	"kubernetes-serverless/model"
+	"log"
 	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -129,6 +129,7 @@ func (k *KubeCli) buildJobSpec(req model.RunRequest, reqRes, limitRes corev1.Res
 
 	backoffLimit := int32(0) // 批次任務不盲目重試
 	ttl := int32(300)        // 執行完畢 5 分鐘後自動被 kubernetes 回收
+	// activeDeadline  := int64(120) // Job 最多存活 120 秒，超時強制 Kill（防止 ImagePullBackOff 等卡死情況）
 
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
@@ -141,6 +142,7 @@ func (k *KubeCli) buildJobSpec(req model.RunRequest, reqRes, limitRes corev1.Res
 			},
 		},
 		Spec: batchv1.JobSpec{
+			// ActiveDeadlineSeconds:   &activeDeadline,
 			BackoffLimit:            &backoffLimit,
 			TTLSecondsAfterFinished: &ttl,
 			Template: corev1.PodTemplateSpec{

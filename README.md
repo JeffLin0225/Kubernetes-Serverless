@@ -18,3 +18,9 @@ kube job 物件測試：
     "image": "prefect-demo:latest",
     "env": {}
   }'
+
+查看 configMap
+  kubectl get configmap
+
+套用 configMap 
+kubectl apply -f configMap/system-quotas.yaml

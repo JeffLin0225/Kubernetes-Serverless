@@ -26,3 +26,7 @@ r.SetTrustedProxies(nil)  // 不信任任何 proxy（直連模式）
 3. 
 
 cron 探針服務就好
+
+4. 
+
+增加告警，是否pods 有被啟動起來，是否失敗
