@@ -1,9 +1,11 @@
 package controller
 
 import (
-	"net/http"
+	"fmt"
 	"kubernetes-serverless/model"
 	"kubernetes-serverless/service/kube"
+	"log"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
@@ -31,9 +33,10 @@ func (ctrl *RunController) HandleRun(c *gin.Context) {
 	// 呼叫 Service 執行 K8s 操作
 	job, err := ctrl.kubeCli.CreateJob(c.Request.Context(), req)
 	if err != nil {
+		log.Printf("[ERROR] 建立 Job 失敗，TaskID=%s SystemID=%s err=%v", req.TaskID, req.SystemID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"status": "error",
-			"error":  "建立 Job 失敗: " + err.Error(),
+			"error":  fmt.Sprintf("建立 Job 失敗，請聯繫管理員，TaskID=%s SystemID=%s", req.TaskID, req.SystemID),
 		})
 		return
 	}
