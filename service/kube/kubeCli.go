@@ -3,9 +3,9 @@ package kube
 import (
 	"context"
 	"fmt"
-	"log"
 	"kubernetes-serverless/config"
 	"kubernetes-serverless/model"
+	"log"
 	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -14,24 +14,28 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
-type kubeCli struct {
+type KubeCli struct {
 	client *kubernetes.Clientset
 	cfg    *config.Config
 }
 
-func NewKubeCli(config *config.Config) (*kubeCli, error) {
+func NewKubeCli(config *config.Config) (*KubeCli, error) {
 
-	// 1. rest.InClusterConfig()：
-	// 專門用於「程式本身就跑在 K8s Pod 內部」的情境。
-	// 它會自動去讀取 K8s 掛載在 Pod 內部的 ServiceAccount Token 與 CA 憑證
-	// （路徑通常在 /var/run/secrets/kubernetes.io/serviceaccount/），
-	// 並自動取得叢集 API Server 的內部連線位址，生成連線設定物件 (rest.Config)。
-	// ※ 注意：如果在 Mac/Windows 本機直接執行此程式，因為沒有這些 Pod 內部檔案，這一步會報錯。
+	// 優先嘗試 In-Cluster config（跑在 K8s Pod 內時使用）
+	// 若失敗（本機開發），自動 fallback 到 ~/.kube/config
 	k8sConfig, err := rest.InClusterConfig()
 	if err != nil {
-		return nil, err
+		log.Println("[INFO] 非 In-Cluster 環境，改用 ~/.kube/config 連線（本機開發模式）")
+		loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
+		k8sConfig, err = clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+			loadingRules, &clientcmd.ConfigOverrides{},
+		).ClientConfig()
+		if err != nil {
+			return nil, fmt.Errorf("無法建立 K8s 連線設定: %w", err)
+		}
 	}
 
 	// 2. kubernetes.NewForConfig(k8sConfig)：
@@ -43,13 +47,13 @@ func NewKubeCli(config *config.Config) (*kubeCli, error) {
 		return nil, err
 	}
 
-	return &kubeCli{
+	return &KubeCli{
 		client: clientSet,
 		cfg:    config,
 	}, nil
 }
 
-func (k *kubeCli) CreateJob(ctx context.Context, req model.RunRequest) (*batchv1.Job, error) {
+func (k *KubeCli) CreateJob(ctx context.Context, req model.RunRequest) (*batchv1.Job, error) {
 	// 1. 根據 SystemID 取得該系統核准的資源配額
 	reqRes, limitRes, err := k.resolveSystemResources(ctx, req.SystemID)
 	if err != nil {
@@ -59,19 +63,19 @@ func (k *kubeCli) CreateJob(ctx context.Context, req model.RunRequest) (*batchv1
 
 	jobSpecs := k.buildJobSpec(req, reqRes, limitRes)
 
-	creatJob, err := k.client.BatchV1().Jobs(k.cfg.Namespace).Create(ctx, jobSpecs, metav1.CreateOptions{})
+	createdJob, err := k.client.BatchV1().Jobs(k.cfg.Namespace).Create(ctx, jobSpecs, metav1.CreateOptions{})
 	if err != nil {
-		return fmt.Errorf("建立 Kubernetes Job 失敗: %w", err), nil
+		return nil, fmt.Errorf("建立 Kubernetes Job 失敗: %w", err)
 	}
 
-	log.Printf("[Success] 已建立系統 '%s' 的 Job: '%s'", req.SystemID, creatJob.Name)
-	return creatJob, nil
+	log.Printf("[Success] 已建立系統 '%s' 的 Job: '%s'", req.SystemID, createdJob.Name)
+	return createdJob, nil
 }
 
 /**
  * （檢查/取） ConfigMap 資源配置
  */
-func (k *kubeCli) resolveSystemResources(ctx context.Context, systemID string) (corev1.ResourceList, corev1.ResourceList, error) {
+func (k *KubeCli) resolveSystemResources(ctx context.Context, systemID string) (corev1.ResourceList, corev1.ResourceList, error) {
 
 	cmName := k.cfg.SystemQuotasCM
 
@@ -125,11 +129,12 @@ func (k *KubeCli) buildJobSpec(req model.RunRequest, reqRes, limitRes corev1.Res
 
 	backoffLimit := int32(0) // 批次任務不盲目重試
 	ttl := int32(300)        // 執行完畢 5 分鐘後自動被 kubernetes 回收
+	// activeDeadline  := int64(120) // Job 最多存活 120 秒，超時強制 Kill（防止 ImagePullBackOff 等卡死情況）
 
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      jobName,
-			Namespace: k.cfg.Namespace, 
+			Namespace: k.cfg.Namespace,
 			Labels: map[string]string{
 				"app.kubernetes.io/managed-by": "serverless-engine",
 				"system_id":                    req.SystemID,
@@ -137,6 +142,7 @@ func (k *KubeCli) buildJobSpec(req model.RunRequest, reqRes, limitRes corev1.Res
 			},
 		},
 		Spec: batchv1.JobSpec{
+			// ActiveDeadlineSeconds:   &activeDeadline,
 			BackoffLimit:            &backoffLimit,
 			TTLSecondsAfterFinished: &ttl,
 			Template: corev1.PodTemplateSpec{

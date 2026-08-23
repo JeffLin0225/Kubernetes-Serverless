@@ -1,0 +1,32 @@
+一．
+
+兩個 WARNING
+1. Debug mode
+
+Running in "debug" mode. Switch to "release" mode in production.
+開發階段沒問題，上 K8s 前記得加：
+
+go
+gin.SetMode(gin.ReleaseMode)
+或設環境變數 GIN_MODE=release。
+
+二．
+
+Trusted Proxies（比較要注意）
+
+You trusted all proxies, this is NOT safe.
+Gin 預設信任所有代理，意思是任何人都可以偽造 X-Forwarded-For header 讓你以為請求來自別的 IP。上 K8s 後你前面會有 ingress / load balancer，建議在 router 加一行：
+
+go
+r := gin.Default()
+r.SetTrustedProxies(nil)  // 不信任任何 proxy（直連模式）
+// 或明確指定你的 ingress IP
+// r.SetTrustedProxies([]string{"10.0.0.0/8"})
+
+3. 
+
+cron 探針服務就好
+
+4. 
+
+增加告警，是否pods 有被啟動起來，是否失敗
