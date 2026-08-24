@@ -8,7 +8,6 @@ import (
 )
 
 type Config struct {
-	PrefectAPIURL   string
 	Namespace       string
 	Port            string
 	ImagePullPolicy string
@@ -23,7 +22,6 @@ func LoadConfig() *Config {
 	}
 
 	return &Config{
-		PrefectAPIURL:   mustGetEnv("PREFECT_API_URL"),
 		Namespace:       mustGetEnv("NAMESPACE"),
 		Port:            mustGetEnv("PORT"),
 		ImagePullPolicy: mustGetEnv("IMAGE_PULL_POLICY"),

@@ -27,6 +27,4 @@ func main() {
 	if err := r.Run(":" + cfg.Port); err != nil {
 		log.Fatalf("服務啟動失敗 %v", err)
 	}
-
-	log.Printf("連線 Prefect Server API: %s", cfg.PrefectAPIURL)
 }

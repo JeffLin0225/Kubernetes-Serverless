@@ -141,7 +141,6 @@ kubectl delete pod <pod-name>
 
 | 變數 | 說明 | 預設 |
 |------|------|------|
-| `PREFECT_API_URL` | Prefect API 位址 | — |
 | `NAMESPACE` | K8s Namespace | — |
 | `PORT` | 服務監聽 Port | — |
 | `IMAGE_PULL_POLICY` | Image 拉取策略 | — |
