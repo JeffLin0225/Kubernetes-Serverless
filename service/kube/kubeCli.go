@@ -124,12 +124,11 @@ func (k *KubeCli) resolveSystemResources(ctx context.Context, systemID string) (
 
 func (k *KubeCli) buildJobSpec(req model.RunRequest, reqRes, limitRes corev1.ResourceList) *batchv1.Job {
 	// 1. 通用 Job 命名：格式為 job-<system_id>-<timestamp>
-	//（Printf 是直接印在終端機螢幕上，不會回傳字串）
-	jobName := fmt.Sprintf("job-%s-%d", req.SystemID, time.Now().UnixNano()/1e6)
+	jobName := fmt.Sprintf("job-%s-%d", req.SystemID, time.Now().UnixMilli())
 
 	backoffLimit := int32(0) // 批次任務不盲目重試
 	ttl := int32(300)        // 執行完畢 5 分鐘後自動被 kubernetes 回收
-	// activeDeadline  := int64(120) // Job 最多存活 120 秒，超時強制 Kill（防止 ImagePullBackOff 等卡死情況）
+	// activeDeadline := int64(120) // Job 最多存活 120 秒，超時強制 Kill（防止 ImagePullBackOff 等卡死情況，後續啟用時可解開）
 
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
