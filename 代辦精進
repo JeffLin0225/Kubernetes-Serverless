@@ -29,7 +29,22 @@ cron 探針服務就好
 
 4. 
 
-增加告警，是否pods 有被啟動起來，是否失敗
+增加告警與異常死 Pod 自動清理機制（Cleaner / Watcher）
+- 問題：當 Pod 發生 `ErrImageNeverPull`、`ImagePullBackOff` 等啟動失敗時，Pod 會卡在等待重試，持續霸佔 K8s Node 的 CPU/Memory 預約配額（Requests）。但若寫死 ActiveDeadlineSeconds 又會誤殺跑很久的正常任務。
+- 解法：透過獨立 Cleaner 服務或背景 Watcher Goroutine 監聽 Pod 狀態：
+  - 若狀態為 `Running`：不干預，讓任務正常跑完。
+  - 若狀態為 `ErrImageNeverPull` / `ImagePullBackOff` 等不可逆啟動失敗：立即刪除該 Job 釋放配額並發出告警。
+- 手動清理指令：
+  ```bash
+  # 刪除特定 Job（會連帶刪除底下 Pod）
+  kubectl delete job <job-name>
+
+  # 一鍵清理所有由 Serverless Engine 管理的 Job
+  kubectl delete jobs -l app.kubernetes.io/managed-by=serverless-engine
+
+  # 刪除特定卡住的 Pod
+  kubectl delete pod <pod-name> --force --grace-period=0
+  ```
 
 5. 
 
