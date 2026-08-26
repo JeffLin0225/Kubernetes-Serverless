@@ -57,18 +57,24 @@ func (k *KubeCli) CreateJob(ctx context.Context, req model.RunRequest) (*batchv1
 	// 1. 根據 SystemID 取得該系統核准的資源配額
 	reqRes, limitRes, err := k.resolveSystemResources(ctx, req.SystemID)
 	if err != nil {
-		log.Printf("Quota Error 系統 '%s' 資源驗證失敗: '%v'", req.SystemID, err)
-		return nil, fmt.Errorf("資源配額不合規: %w", err)
+		log.Printf("[WARN] Quota 驗證失敗: %v", err)
+		return nil, err
 	}
 
-	jobSpecs := k.buildJobSpec(req, reqRes, limitRes)
+	// 決定目標 Namespace：若未指定則預設使用 default
+	targetNs := req.Namespace
+	if targetNs == "" {
+		targetNs = "default"
+	}
 
-	createdJob, err := k.client.BatchV1().Jobs(k.cfg.Namespace).Create(ctx, jobSpecs, metav1.CreateOptions{})
+	jobSpecs := k.buildJobSpec(req, targetNs, reqRes, limitRes)
+
+	createdJob, err := k.client.BatchV1().Jobs(targetNs).Create(ctx, jobSpecs, metav1.CreateOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("建立 Kubernetes Job 失敗: %w", err)
 	}
 
-	log.Printf("[Success] 已建立系統 '%s' 的 Job: '%s'", req.SystemID, createdJob.Name)
+	log.Printf("[Success] 已建立系統 '%s' 的 Job: '%s' (Namespace: '%s')", req.SystemID, createdJob.Name, targetNs)
 	return createdJob, nil
 }
 
@@ -122,7 +128,7 @@ func (k *KubeCli) resolveSystemResources(ctx context.Context, systemID string) (
 		}, nil
 }
 
-func (k *KubeCli) buildJobSpec(req model.RunRequest, reqRes, limitRes corev1.ResourceList) *batchv1.Job {
+func (k *KubeCli) buildJobSpec(req model.RunRequest, targetNs string, reqRes, limitRes corev1.ResourceList) *batchv1.Job {
 	// 1. 通用 Job 命名：格式為 job-<system_id>-<timestamp>
 	jobName := fmt.Sprintf("job-%s-%d", req.SystemID, time.Now().UnixMilli())
 
@@ -133,7 +139,7 @@ func (k *KubeCli) buildJobSpec(req model.RunRequest, reqRes, limitRes corev1.Res
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      jobName,
-			Namespace: k.cfg.Namespace,
+			Namespace: targetNs,
 			Labels: map[string]string{
 				"app.kubernetes.io/managed-by": "serverless-engine",
 				"system_id":                    req.SystemID,
@@ -157,6 +163,7 @@ func (k *KubeCli) buildJobSpec(req model.RunRequest, reqRes, limitRes corev1.Res
 						{
 							Name:            "task-runner",
 							Image:           req.Image,
+							Command:         req.Command,
 							ImagePullPolicy: corev1.PullPolicy(k.cfg.ImagePullPolicy),
 							Resources: corev1.ResourceRequirements{
 								Requests: reqRes,

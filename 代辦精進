@@ -30,3 +30,9 @@ cron 探針服務就好
 4. 
 
 增加告警，是否pods 有被啟動起來，是否失敗
+
+5. 
+
+ConfigMap 配額 In-Memory 快取 / Informer 機制
+- 問題：目前在 resolveSystemResources 中，每次收到 /api/run 請求都會發出 Get ConfigMap 呼叫，高並發時會對 kube-apiserver 造成壓力與額外延遲。
+- 改善：引入 In-Memory 快取（TTL Cache）或利用 client-go Informer / Watcher 監聽 ConfigMap 異動事件，即時更新本地配額快取。

@@ -70,9 +70,7 @@ curl -s -X POST http://localhost:8080/api/run \
     "system_id": "crawler",
     "task_id": "flow-run-abc123",
     "image": "your-image:latest",
-    "env": {
-      "PREFECT_FLOW_RUN_ID": "abc123"
-    }
+    "command": ["python", "flow.py"]
   }'
 ```
 
@@ -83,8 +81,7 @@ curl -s -X POST http://localhost:8080/api/run \
 | `system_id` | string | ✅ | 系統識別碼，需在 ConfigMap 中有對應配額 |
 | `task_id` | string | ✅ | 任務唯一識別碼（Prefect flow_run_id） |
 | `image` | string | ✅ | 要執行的容器 image |
-| `env` | object | ✅ | 注入容器的環境變數 |
-| `command` | array | — | 覆蓋容器預設指令 |
+| `command` | array | — | 覆蓋容器預設指令（例如：`["python", "flow.py"]`） |
 
 **Response**
 ```json

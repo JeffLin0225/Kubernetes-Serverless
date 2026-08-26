@@ -1,0 +1,47 @@
+### 環境變數設定（可切換 Local 或 K8s Ingress）
+@baseUrl = http://localhost:8080
+
+### 1. 健康檢查
+GET {{baseUrl}}/health
+
+### 2. 建立 Job（標準成功案例 - crawler）
+POST {{baseUrl}}/api/run
+Content-Type: application/json
+
+{
+  "system_id": "crawler",
+  "task_id": "flow-run-test-001",
+  "namespace": "default",
+  "image": "python:3.11-alpine",
+  "command": ["python", "-c", "print('Hello Serverless Engine!')"]
+}
+
+### 3. 建立 Job（無 command，使用 image 預設 CMD）
+POST {{baseUrl}}/api/run
+Content-Type: application/json
+
+{
+  "system_id": "reporting",
+  "task_id": "flow-run-test-002",
+  "namespace": "default",
+  "image": "busybox:latest"
+}
+
+### 4. 異常測試：系統未註冊配額（預期報錯）
+POST {{baseUrl}}/api/run
+Content-Type: application/json
+
+{
+  "system_id": "not_exist_system",
+  "task_id": "flow-run-test-err",
+  "image": "python:3.11-alpine"
+}
+
+### 5. 異常測試：缺少必填欄位 task_id
+POST {{baseUrl}}/api/run
+Content-Type: application/json
+
+{
+  "system_id": "crawler",
+  "image": "python:3.11-alpine"
+}
