@@ -28,18 +28,18 @@ type CleanerConfig struct {
 	ScanInterval    time.Duration
 }
 
-// LoadConfig 載入全專案設定
-func LoadConfig() *Config {
-	// 支援載入當前目錄或上一層根目錄的 .env
-	if err := godotenv.Load(".env", "../.env"); err != nil {
-		log.Println("[INFO] 未找到 .env 檔，將使用系統環境變數（K8s 模式）")
-	}
+// // LoadConfig 載入全專案設定
+// func LoadConfig() *Config {
+// 	// 支援載入當前目錄或上一層根目錄的 .env
+// 	if err := godotenv.Load(".env", "../.env"); err != nil {
+// 		log.Println("[INFO] 未找到 engine .env 檔，將使用系統環境變數（K8s 模式）")
+// 	}
 
-	return &Config{
-		Engine:  loadEngineConfig(),
-		Cleaner: loadCleanerConfig(),
-	}
-}
+// 	return &Config{
+// 		Engine:  loadEngineConfig(),
+// 		Cleaner: loadCleanerConfig(),
+// 	}
+// }
 
 // LoadEngineConfig 專門載入 Engine 微服務設定
 func LoadEngineConfig() *EngineConfig {
@@ -53,7 +53,7 @@ func LoadEngineConfig() *EngineConfig {
 // LoadCleanerConfig 專門載入 Cleaner 微服務設定
 func LoadCleanerConfig() *CleanerConfig {
 	if err := godotenv.Load(".env", "../.env"); err != nil {
-		log.Println("[INFO] 未找到 .env 檔，將使用系統環境變數（K8s 模式）")
+		log.Println("[INFO] 未找到 cleaner .env 檔，將使用系統環境變數（K8s 模式）")
 	}
 	cfg := loadCleanerConfig()
 	return &cfg

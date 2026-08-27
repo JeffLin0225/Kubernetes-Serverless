@@ -3,8 +3,8 @@ package service
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
+	"log"
 
 	"kubernetes-serverless/common/config"
 	"kubernetes-serverless/common/model"
@@ -28,6 +28,9 @@ func NewJobLauncher(cfg *config.EngineConfig, client *kubernetes.Clientset) *Job
 	}
 }
 
+/**
+ * 建立JOB
+ */
 func (l *JobLauncher) CreateJob(ctx context.Context, req model.RunRequest) (*batchv1.Job, error) {
 	// 1. 根據 SystemID 取得該系統核准的資源配額
 	reqRes, limitRes, err := l.resolveSystemResources(ctx, req.SystemID)
@@ -102,6 +105,9 @@ func (l *JobLauncher) resolveSystemResources(ctx context.Context, systemID strin
 		}, nil
 }
 
+/**
+組建 JOB 參數
+ */
 func (l *JobLauncher) buildJobSpec(req model.RunRequest, targetNs string, reqRes, limitRes corev1.ResourceList) *batchv1.Job {
 	// 通用 Job 命名：格式為 job-<system_id>-<timestamp>
 	jobName := fmt.Sprintf("job-%s-%d", req.SystemID, time.Now().UnixMilli())
