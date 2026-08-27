@@ -2,21 +2,22 @@ package controller
 
 import (
 	"fmt"
-	"kubernetes-serverless/model"
-	"kubernetes-serverless/service/kube"
 	"log"
 	"net/http"
+
+	"kubernetes-serverless/common/model"
+	"kubernetes-serverless/engine/service"
 
 	"github.com/gin-gonic/gin"
 )
 
 type RunController struct {
-	kubeCli *kube.KubeCli
+	jobLauncher *service.JobLauncher
 }
 
-func NewRunController(kubeCli *kube.KubeCli) *RunController {
+func NewRunController(jobLauncher *service.JobLauncher) *RunController {
 	return &RunController{
-		kubeCli: kubeCli,
+		jobLauncher: jobLauncher,
 	}
 }
 
@@ -25,13 +26,15 @@ func (ctrl *RunController) HandleRun(c *gin.Context) {
 
 	// ShouldBindJSON 會自動解析 Body 並驗證 required 條件
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "error",
-			"error": "無效的請求資料:" + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status": "error",
+			"error":  "無效的請求資料: " + err.Error(),
+		})
 		return
 	}
 
 	// 呼叫 Service 執行 K8s 操作
-	job, err := ctrl.kubeCli.CreateJob(c.Request.Context(), req)
+	job, err := ctrl.jobLauncher.CreateJob(c.Request.Context(), req)
 	if err != nil {
 		log.Printf("[ERROR] 建立 Job 失敗，TaskID=%s SystemID=%s err=%v", req.TaskID, req.SystemID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{
