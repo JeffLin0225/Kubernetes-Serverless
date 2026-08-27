@@ -27,6 +27,7 @@ func main() {
 	cleanerService := service.NewCleanerService(cfg, clientSet)
 
 	// 支援優雅停機 (Graceful Shutdown)
+	// ctx 生命週期控制牌 => 等同於 C# 的 CancellationToken
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 

@@ -61,6 +61,7 @@ func (s *CleanerService) scanAndClean(parentCtx context.Context) {
 	defer cancel()
 
 	// 過濾由 Serverless Engine 發起的 Pods（支援 system_id 標籤或 managed-by 標籤）
+	// （相當於 SQL 的 WHERE 條件 或 kubectl 指令的篩選參數）
 	listOptions := metav1.ListOptions{
 		LabelSelector: "system_id",
 	}
@@ -72,10 +73,10 @@ func (s *CleanerService) scanAndClean(parentCtx context.Context) {
 	}
 
 	cleanedCount := 0
-	for _, pod := range pods.Items {
+	for _, pod := range pods.Items { // range 會同時回傳 兩個值：第一個是索引（0, 1, 2...），第二個是元素實體（pod）
 		// 檢查每個容器的狀態
-		for _, cs := range pod.Status.ContainerStatuses {
-			if cs.State.Waiting != nil && fatalReasons[cs.State.Waiting.Reason] {
+		for _, cs := range pod.Status.ContainerStatuses { // ContainerStatuses 是一個陣列，代表這個 Pod 裡面所有容器的執行狀態。 (cs 是 ContainerStatus 的縮寫。)
+			if cs.State.Waiting != nil && fatalReasons[cs.State.Waiting.Reason] { // 如果 cs.State.Waiting.Reason 是 "ErrImageNeverPull"，查出來就是 true；如果是普通的 "ContainerCreating"，查出來就是預設值 false。
 				cleanedCount++
 				reason := cs.State.Waiting.Reason
 				systemID := pod.Labels["system_id"]

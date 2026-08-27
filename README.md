@@ -38,8 +38,9 @@
 │   └── service/                  # K8s Job 建立與配額解析邏輯
 │
 ├── cleaner/                      # 【微服務 2：Pod 異常死鎖收割監控服務】
-│   ├── main.go                   # Cleaner 啟動入口 (Graceful Shutdown)
-│   └── service/                  # Pod 狀態巡檢、告警與自動清理邏輯
+│   ├── main.go                   # Cleaner 啟動入口 (Graceful Shutdown，無需 Port)
+│   ├── service/                  # Pod 狀態巡檢、告警與自動清理邏輯
+│   └── .env                      # Cleaner 專屬環境變數 (TARGET_NAMESPACE, SCAN_INTERVAL)
 │
 ├── common/                       # 【跨服務共用層】
 │   ├── config/                   # 環境變數與設定檔載入
@@ -49,7 +50,7 @@
 ├── test/                         # HTTP 測試檔 (api.http)
 ├── configMap/                    # K8s 系統配額表 (system-quotas.yaml)
 ├── go.mod                        # 根目錄統一套件管理
-└── .env                          # 環境變數設定檔
+└── .env                          # Engine 根目錄環境變數設定檔
 ```
 
 ---
@@ -95,8 +96,12 @@ go run ./cleaner
 ```
 啟動成功後會看到：
 ```
-[Cleaner] 異常 Pod 收割微服務啟動，巡檢週期: 5s, 目標 Namespace: '' (空字串代表全叢集)
+[INFO] 正在初始化 Pod Cleaner 監控微服務...
+[INFO] 非 In-Cluster 環境，改用 ~/.kube/config 連線（本機開發模式）
+🚀 [Cleaner] 異常 Pod 收割微服務啟動，巡檢週期: 30s, 目標 Namespace: '' (空字串代表全叢集)
 ```
+
+> **注意**：Cleaner 為純背景 Worker，不需要開任何 Port，無需建立 K8s Service 或 Ingress。
 
 ---
 
@@ -172,12 +177,19 @@ crawler.memory_limit: "1Gi"
 # 查看所有 ConfigMap
 kubectl get configmap
 
-# 查看目前由 Serverless Engine 管理的 Job 與 Pod
-kubectl get jobs -l app.kubernetes.io/managed-by=serverless-engine
-kubectl get pods -l app.kubernetes.io/managed-by=serverless-engine
+# 查看目前由 Serverless Engine 建立的 Job 與 Pod（以 system_id 標籤篩選）
+kubectl get jobs -l system_id
+kubectl get pods -l system_id
 
-# 一鍵清除所有 Engine 管理的 Job
-kubectl delete jobs -l app.kubernetes.io/managed-by=serverless-engine
+# 將 system_id / task_id 展開為獨立欄位顯示（一目瞭然）
+kubectl get pods -L system_id,task_id
+
+# 針對特定系統或任務查詢
+kubectl get pods -l system_id=crawler
+kubectl get pods -l task_id=flow-run-abc123
+
+# 一鍵清除所有 Engine 管理的 Job（Cleaner 通常會自動處理，手動清除時使用）
+kubectl delete jobs -l system_id
 
 # 查看 Pod 詳細資訊與 Log
 kubectl describe pod <pod-name>
@@ -188,10 +200,19 @@ kubectl logs <pod-name>
 
 ## 環境變數
 
+### Engine（`engine/.env` 或根目錄 `.env`）
+
 | 變數 | 說明 | 預設 |
 |------|------|------|
-| `NAMESPACE` | 管理配額 ConfigMap 所在的 Namespace | default |
-| `PORT` | 服務監聽 Port | 8080 |
-| `IMAGE_PULL_POLICY` | Image 拉取策略（Always / IfNotPresent / Never） | Never |
-| `SYSTEM_QUOTAS_CONFIGMAP` | 配額 ConfigMap 名稱 | serverless-system-quotas |
-| `GIN_MODE` | Gin 模式（debug/release） | debug |
+| `NAMESPACE` | 管理配額 ConfigMap 所在的 Namespace | `default` |
+| `PORT` | 服務監聽 Port | `8080` |
+| `IMAGE_PULL_POLICY` | Image 拉取策略（`Always` / `IfNotPresent` / `Never`） | `Never` |
+| `SYSTEM_QUOTAS_CONFIGMAP` | 配額 ConfigMap 名稱 | `serverless-system-quotas` |
+| `GIN_MODE` | Gin 模式（`debug` / `release`） | `debug` |
+
+### Cleaner（`cleaner/.env`）
+
+| 變數 | 說明 | 預設 |
+|------|------|------|
+| `TARGET_NAMESPACE` | 監控目標 Namespace，空字串代表跨全叢集監控 | `""` (全叢集) |
+| `SCAN_INTERVAL` | 異常 Pod 巡檢週期，需帶單位（如 `30s`、`1m`、`500ms`） | `5s` |
