@@ -1,56 +1,94 @@
 # Kubernetes Serverless Engine
 
-一個輕量、高擴展的 Kubernetes Serverless 執行引擎與自動監控收割系統，接收來自 Prefect 的任務請求，動態在 K8s 叢集上建立 Job 執行，並提供獨立的死 Pod 自動清理收割微服務。
+一個輕量、高擴展的 Kubernetes Serverless 執行引擎，接收來自 Prefect 的任務請求，動態在 K8s 叢集上建立 Job 執行；並附帶獨立的死 Pod 自動收割監控微服務，確保叢集資源不被異常 Pod 卡死。
 
 ---
 
-## 架構概覽
+## 系統架構
 
-```
-[ 外部系統 / Prefect Server ]
-             │
-             │ POST /api/run (可指定 target namespace, command)
-             ▼
-┌───────────────────────────────┐
-│  Engine (Serverless API 引擎) │
-└──────────────┬────────────────┘
-               │ K8s API
-               ▼
-┌───────────────────────────────┐     監控與收割異常死 Pod (ErrImageNeverPull 等)
-│        Kubernetes Job         │ ◄──────────────────────────────────────────────┐
-│  (動態建立，執行完畢 5m 回收)    │                                                │
-└───────────────────────────────┘                                 ┌──────────────┴──────────────┐
-                                                                  │ Cleaner (死 Pod 收割微服務)  │
-                                                                  └─────────────────────────────┘
+```mermaid
+flowchart TB
+    %% 樣式定義
+    classDef client fill:#E8F0FE,stroke:#4285F4,stroke-width:2px,color:#1967D2;
+    classDef service fill:#E6F4EA,stroke:#34A853,stroke-width:2px,color:#137333;
+    classDef cleaner fill:#FCE8E6,stroke:#EA4335,stroke-width:2px,color:#C5221F;
+    classDef k8s fill:#FEF7E0,stroke:#FBBC04,stroke-width:2px,color:#B06000;
+    classDef dead fill:#FAD2CF,stroke:#D93025,stroke-width:2px,stroke-dasharray: 4 4,color:#A50E0E;
+
+    subgraph TriggerLayer ["🌐 外部觸發來源"]
+        P["<b>Prefect Server / 外部系統</b><br/>發起批次運算請求"]:::client
+    end
+
+    subgraph ServiceLayer ["⚙️ 微服務應用層 (Go Monorepo)"]
+        direction TB
+        E["<b>Engine (API 引擎)</b><br/>Port: 8080<br/>• POST /api/run<br/>• GET /health"]:::service
+        C["<b>Cleaner (收割微服務)</b><br/>Background Daemon<br/>• Graceful Shutdown<br/>• 定期輪詢無須開 Port"]:::cleaner
+    end
+
+    subgraph K8sCluster ["☸️ Kubernetes 叢集環境"]
+        direction TB
+        CM[("<b>ConfigMap</b><br/>serverless-system-quotas<br/>• CPU Request/Limit<br/>• Memory Request/Limit")]:::k8s
+        
+        subgraph JobExecution ["任務執行生命週期"]
+            J["<b>Kubernetes Job</b><br/>name: job-{system_id}-{timestamp}<br/>• backoffLimit: 0<br/>• ttlSecondsAfterFinished: 300s"]:::k8s
+            POD["<b>Task Pod (task-runner)</b><br/>• 注入配額 (Request/Limit)<br/>• 執行 flow.py 任務"]:::k8s
+        end
+
+        DEAD_POD["<b>異常死鎖 Pod</b><br/>• ErrImageNeverPull<br/>• ImagePullBackOff<br/>• InvalidImageName"]:::dead
+    end
+
+    %% 主鏈路：任務觸發與建立
+    P -->|"1. POST /api/run {system_id, task_id, image, command}"| E
+    E -->|"2. 讀取配額與系統校驗"| CM
+    CM -.->|"3. 回傳資源參數"| E
+    E -->|"4. 動態建立批次 Job"| J
+    J -->|"5. 排程建立"| POD
+    POD -.->|"6. 執行完畢 5 分鐘後自動回收"| J
+
+    %% 副鏈路：異常巡檢與收割
+    C -->|"A. 定時巡檢 (依 SCAN_INTERVAL)<br/>LabelSelector: system_id"| K8sCluster
+    K8sCluster -.->|"B. 捕捉不可逆失敗狀態"| DEAD_POD
+    DEAD_POD -->|"C. 觸發警報並定位關聯 Job"| C
+    C ==>|"D. Cascade 強制刪除 Job/Pod<br/>即刻釋放節點 CPU/RAM 配額"| J
 ```
 
 ---
 
 ## 專案結構
 
-本專案採用 Service-Centric 微服務架構，將 API 觸發引擎與背景監控服務徹底解耦：
-
 ```text
-├── engine/                       # 【微服務 1：Serverless API 觸發引擎】
-│   ├── main.go                   # Engine 啟動入口 (Port 8080)
-│   ├── controller/               # HTTP Handlers (health, run)
-│   ├── router/                   # Gin 路由設定
-│   └── service/                  # K8s Job 建立與配額解析邏輯
+├── engine/                        # 【微服務 1】Serverless API 觸發引擎，對外暴露 HTTP 接口
+│   ├── main.go                    # 啟動入口：初始化 Config、K8s Client、JobLauncher，啟動 Gin Server (Port 8080)
+│   ├── controller/                # HTTP Handler 層，負責解析請求與回應
+│   │   ├── health.go              # GET /health：健康檢查端點
+│   │   └── run.go                 # POST /api/run：接收任務請求，呼叫 JobLauncher 建立 K8s Job
+│   ├── router/                    # Gin 路由設定，集中管理所有路由與 middleware
+│   │   └── router.go              # 路由註冊：/health 與 /api/run 路由綁定
+│   └── service/                   # 業務邏輯層
+│       └── launcher.go            # 核心服務：從 ConfigMap 解析配額、組建 Job Spec、呼叫 K8s API 建立 Job
 │
-├── cleaner/                      # 【微服務 2：Pod 異常死鎖收割監控服務】
-│   ├── main.go                   # Cleaner 啟動入口 (Graceful Shutdown，無需 Port)
-│   ├── service/                  # Pod 狀態巡檢、告警與自動清理邏輯
-│   └── .env                      # Cleaner 專屬環境變數 (TARGET_NAMESPACE, SCAN_INTERVAL)
+├── cleaner/                       # 【微服務 2】異常 Pod 自動收割監控服務，純背景 Worker
+│   ├── main.go                    # 啟動入口：初始化 Config、K8s Client，啟動 CleanerService 並支援 Graceful Shutdown
+│   └── service/                   # 業務邏輯層
+│       └── cleaner.go             # 核心服務：定時巡檢 Pod 狀態，偵測致命錯誤（ErrImageNeverPull 等）並自動刪除 Job/Pod
 │
-├── common/                       # 【跨服務共用層】
-│   ├── config/                   # 環境變數與設定檔載入
-│   ├── kube/                     # K8s Clientset 連線管理
-│   └── model/                    # 共用 DTO 資料模型 (RunRequest/Response)
+├── common/                        # 【跨服務共用層】兩個微服務共享的基礎建設
+│   ├── config/                    # 環境變數載入與設定結構定義
+│   │   └── config.go              # EngineConfig / CleanerConfig：從 .env 或系統環境變數載入設定
+│   ├── kube/                      # K8s 連線管理
+│   │   └── client.go              # 初始化 Kubernetes Clientset，In-Cluster 優先，本機自動 Fallback 至 ~/.kube/config
+│   └── model/                     # 共用 DTO 資料模型
+│       └── run.go                 # RunRequest（任務請求）/ RunResponse（回應），含欄位驗證規則
 │
-├── test/                         # HTTP 測試檔 (api.http)
-├── configMap/                    # K8s 系統配額表 (system-quotas.yaml)
-├── go.mod                        # 根目錄統一套件管理
-└── .env                          # Engine 根目錄環境變數設定檔
+├── configMap/                     # K8s 基礎設施設定
+│   └── system-quotas.yaml         # 各系統 CPU / Memory 配額定義（crawler / reporting / analytics）
+│
+├── test/                          # 測試與開發工具
+│   └── api.http                   # IDE HTTP Client 測試檔（GoLand / VS Code REST Client）
+│
+├── flow.py                        # Prefect Flow 範例，在 K8s Pod 內執行的批次任務腳本
+├── go.mod                         # Go Module 宣告與依賴管理（根目錄統一管理兩個微服務）
+└── go.sum                         # 依賴版本鎖定檔
 ```
 
 ---
@@ -129,11 +167,11 @@ curl -s -X POST http://localhost:8080/api/run \
 
 | 欄位 | 型別 | 必填 | 說明 |
 |------|------|------|------|
-| `system_id` | string | ✅ | 系統識別碼，需在 ConfigMap 中有對應配額 |
-| `task_id` | string | ✅ | 任務唯一識別碼（Prefect flow_run_id） |
+| `system_id` | string | ✅ | 系統識別碼，需在 ConfigMap 中有對應配額（max 40 字元） |
+| `task_id` | string | ✅ | 任務唯一識別碼，如 Prefect flow_run_id（max 63 字元） |
 | `namespace` | string | — | 目標 Namespace（若未填則預設為 `default`） |
 | `image` | string | ✅ | 要執行的容器 image |
-| `command` | array | — | 覆蓋容器預設指令（例如：`["python", "flow.py"]`，沒填則使用 Dockerfile 預設 CMD） |
+| `command` | array | — | 覆蓋容器預設指令（如 `["python", "flow.py"]`，未填則使用 Dockerfile 預設 CMD） |
 
 **Response 範例**
 ```json
@@ -143,15 +181,6 @@ curl -s -X POST http://localhost:8080/api/run \
   "job_name": "job-crawler-1787493682127"
 }
 ```
-
----
-
-## 本機測試（HTTP Client）
-
-專案內建 IDE 測試檔 `test/api.http`，可直接在 GoLand / VS Code 中發送請求測試：
-* 健康檢查 (`GET /health`)
-* 成功建立任務 (`POST /api/run`)
-* 異常情況測試（未註冊系統、欄位缺失等）
 
 ---
 
