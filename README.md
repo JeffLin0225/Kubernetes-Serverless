@@ -57,20 +57,21 @@ flowchart TB
 ## 專案結構
 
 ```text
-├── engine/                        # 【微服務 1】Serverless API 觸發引擎，對外暴露 HTTP 接口
-│   ├── main.go                    # 啟動入口：初始化 Config、K8s Client、JobLauncher，啟動 Gin Server (Port 8080)
-│   ├── controller/                # HTTP Handler 層，負責解析請求與回應
-│   │   ├── health.go              # GET /health：健康檢查端點
-│   │   └── run.go                 # POST /api/run：接收任務請求，呼叫 JobLauncher 建立 K8s Job
-│   ├── router/                    # Gin 路由設定，集中管理所有路由與 middleware
-│   │   └── router.go              # 路由註冊：/health 與 /api/run 路由綁定
-│   └── service/                   # 業務邏輯層
-│       └── launcher.go            # 核心服務：從 ConfigMap 解析配額、組建 Job Spec、呼叫 K8s API 建立 Job
-│
-├── cleaner/                       # 【微服務 2】異常 Pod 自動收割監控服務，純背景 Worker
-│   ├── main.go                    # 啟動入口：初始化 Config、K8s Client，啟動 CleanerService 並支援 Graceful Shutdown
-│   └── service/                   # 業務邏輯層
-│       └── cleaner.go             # 核心服務：定時巡檢 Pod 狀態，偵測致命錯誤（ErrImageNeverPull 等）並自動刪除 Job/Pod
+├── services/                      # 【微服務應用層】可獨立編譯運行的微服務集合
+│   ├── engine/                    # 【微服務 1】Serverless API 觸發引擎，對外暴露 HTTP 接口
+│   │   ├── main.go                # 啟動入口：初始化 Config、K8s Client、JobLauncher，啟動 Gin Server (Port 8080)
+│   │   ├── controller/            # HTTP Handler 層，負責解析請求與回應
+│   │   │   ├── health.go          # GET /health：健康檢查端點
+│   │   │   └── run.go             # POST /api/run：接收任務請求，呼叫 JobLauncher 建立 K8s Job
+│   │   ├── router/                # Gin 路由設定，集中管理所有路由與 middleware
+│   │   │   └── router.go          # 路由註冊：/health 與 /api/run 路由綁定
+│   │   └── service/               # 業務邏輯層
+│   │       └── launcher.go        # 核心服務：從 ConfigMap 解析配額、組建 Job Spec、呼叫 K8s API 建立 Job
+│   │
+│   └── cleaner/                   # 【微服務 2】異常 Pod 自動收割監控服務，純背景 Worker
+│       ├── main.go                # 啟動入口：初始化 Config、K8s Client，啟動 CleanerService 並支援 Graceful Shutdown
+│       └── service/               # 業務邏輯層
+│           └── cleaner.go         # 核心服務：定時巡檢 Pod 狀態，偵測致命錯誤（ErrImageNeverPull 等）並自動刪除 Job/Pod
 │
 ├── common/                        # 【跨服務共用層】兩個微服務共享的基礎建設
 │   ├── config/                    # 環境變數載入與設定結構定義
@@ -120,7 +121,7 @@ kubectl get configmap serverless-system-quotas
 
 ### 1. 啟動 Serverless API 引擎（主要服務）
 ```bash
-go run ./engine
+go run ./services/engine
 ```
 啟動成功後會看到：
 ```
@@ -130,7 +131,7 @@ go run ./engine
 
 ### 2. 啟動 Pod Cleaner 異常收割監控服務（背景微服務）
 ```bash
-go run ./cleaner
+go run ./services/cleaner
 ```
 啟動成功後會看到：
 ```
@@ -228,9 +229,9 @@ kubectl logs <pod-name>
 ---
 
 ## 環境變數
-
-### Engine（`engine/.env` 或根目錄 `.env`）
-
+ 
+### Engine（`services/engine/.env` 或根目錄 `.env`）
+ 
 | 變數 | 說明 | 預設 |
 |------|------|------|
 | `NAMESPACE` | 管理配額 ConfigMap 所在的 Namespace | `default` |
@@ -238,8 +239,8 @@ kubectl logs <pod-name>
 | `IMAGE_PULL_POLICY` | Image 拉取策略（`Always` / `IfNotPresent` / `Never`） | `Never` |
 | `SYSTEM_QUOTAS_CONFIGMAP` | 配額 ConfigMap 名稱 | `serverless-system-quotas` |
 | `GIN_MODE` | Gin 模式（`debug` / `release`） | `debug` |
-
-### Cleaner（`cleaner/.env`）
+ 
+### Cleaner（`services/cleaner/.env`）
 
 | 變數 | 說明 | 預設 |
 |------|------|------|
