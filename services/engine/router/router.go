@@ -2,8 +2,8 @@ package router
 
 import (
 	"kubernetes-serverless/common/config"
-	"kubernetes-serverless/engine/controller"
-	"kubernetes-serverless/engine/service"
+	"kubernetes-serverless/services/engine/controller"
+	"kubernetes-serverless/services/engine/service"
 
 	"github.com/gin-gonic/gin"
 )

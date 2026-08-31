@@ -5,8 +5,8 @@ import (
 
 	"kubernetes-serverless/common/config"
 	"kubernetes-serverless/common/kube"
-	"kubernetes-serverless/engine/router"
-	"kubernetes-serverless/engine/service"
+	"kubernetes-serverless/services/engine/router"
+	"kubernetes-serverless/services/engine/service"
 )
 
 func main() {
