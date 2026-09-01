@@ -1,4 +1,4 @@
-module kubernetes-serverless
+module sep
 
 go 1.25.0
 

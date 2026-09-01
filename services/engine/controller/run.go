@@ -5,8 +5,8 @@ import (
 	"log"
 	"net/http"
 
-	"kubernetes-serverless/common/model"
-	"kubernetes-serverless/services/engine/service"
+	"sep/common/model"
+	"sep/services/engine/service"
 
 	"github.com/gin-gonic/gin"
 )

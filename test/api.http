@@ -11,9 +11,9 @@ Content-Type: application/json
 {
   "system_id": "crawler",
   "task_id": "flow-run-test-001",
-  "namespace": "default",
+  "namespace": "ns-sep",
   "image": "python:3.11-alpine",
-  "command": ["python", "-c", "print('Hello Serverless Engine!')"]
+  "command": ["python", "-c", "print('Hello SEP (Serverless Execution Platform)!')"]
 }
 
 ### 3. 建立 Job（無 command，使用 image 預設 CMD）
@@ -23,7 +23,7 @@ Content-Type: application/json
 {
   "system_id": "reporting",
   "task_id": "flow-run-test-002",
-  "namespace": "default",
+  "namespace": "ns-sep",
   "image": "busybox:latest"
 }
 

@@ -1,0 +1,55 @@
+# ========================================
+# 1. 預設全域設定
+# ========================================
+global:
+  namespace: ns-sep
+
+# ========================================
+# 2. 幫來源系統配額  (Quotas for ConfigMap)
+# 後續會被轉成 sep-system-quotas ConfigMap
+# ========================================
+quotas:
+  configMapName: sep-system-quotas
+  systems:
+    # 爬蟲系統
+    crawler:
+      cpu_request: "250m"
+      memory_request: "512Mi"
+      cpu_limit: "500m"
+      memory_limit: "1Gi"
+    # 報表系統
+    reporting:
+      cpu_request: "1000m"
+      memory_request: "2Gi"
+      cpu_limit: "2000m"
+      memory_limit: "4Gi"
+    # 資料分析系統
+    analytics:
+      cpu_request: "2000m"
+      memory_request: "4Gi"
+      cpu_limit: "4000m"
+      memory_limit: "8Gi"
+
+# ========================================
+#  3. SEP Engine 微服務配置
+# (本身服務的配置)
+# ========================================
+engine:
+  replicas: 1
+  port: 8080
+  image:
+    repository: sep-engine
+    tag: latest
+    pullPolicy: Never
+
+# ========================================
+#  4. SEP Cleaner 微服務配置
+# (本身服務的配置)
+# ========================================
+cleaner:
+  replicas: 1
+  scanInterval: 10s
+  image:
+    repository: sep-cleaner
+    tag: latest
+    pullPolicy: Never

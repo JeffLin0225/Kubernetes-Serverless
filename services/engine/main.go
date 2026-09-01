@@ -3,10 +3,10 @@ package main
 import (
 	"log"
 
-	"kubernetes-serverless/common/config"
-	"kubernetes-serverless/common/kube"
-	"kubernetes-serverless/services/engine/router"
-	"kubernetes-serverless/services/engine/service"
+	"sep/common/config"
+	"sep/common/kube"
+	"sep/services/engine/router"
+	"sep/services/engine/service"
 )
 
 func main() {
