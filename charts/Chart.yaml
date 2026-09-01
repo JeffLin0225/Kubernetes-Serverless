@@ -1,0 +1,17 @@
+# v2（Helm 3 的標準）。 (如果是舊版 Helm 2 才是 v1，現在一律寫 v2)
+apiVersion: v2
+
+# Chart 的套件名稱。必須是小寫英文字母與連字號（例如 sep 或 sep-platform）。在模板裡可以透過 {{ .Chart.Name }} 取得這個值。
+name: sep
+
+description: SEP (Serverless Execution Platform) 無伺服器執行平台
+
+# 預設為 application（代表這是一個可直接運行的應用程式）。 (另一種是 library，代表它只是供其他 Chart 引用的共用函式庫)
+type: application
+
+# 這個  Helm 部署腳本 Chart（設定檔本身）的版本號
+version: 0.1.0
+
+# 底層應用程式（Go 程式碼 / Docker Image）的版本號（例如 "1.0.0"）。
+appVersion: "1.0.0"
+

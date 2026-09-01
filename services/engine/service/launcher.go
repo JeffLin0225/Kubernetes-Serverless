@@ -6,8 +6,8 @@ import (
 	"time"
 	"log"
 
-	"kubernetes-serverless/common/config"
-	"kubernetes-serverless/common/model"
+	"sep/common/config"
+	"sep/common/model"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -39,10 +39,10 @@ func (l *JobLauncher) CreateJob(ctx context.Context, req model.RunRequest) (*bat
 		return nil, err
 	}
 
-	// 決定目標 Namespace：若未指定則預設使用 default
+	// 決定目標 Namespace：若未指定則預設使用 cfg 中的 Namespace
 	targetNs := req.Namespace
 	if targetNs == "" {
-		targetNs = "default"
+		targetNs = l.cfg.Namespace
 	}
 
 	jobSpecs := l.buildJobSpec(req, targetNs, reqRes, limitRes)
@@ -120,7 +120,7 @@ func (l *JobLauncher) buildJobSpec(req model.RunRequest, targetNs string, reqRes
 			Name:      jobName,
 			Namespace: targetNs,
 			Labels: map[string]string{
-				"app.kubernetes.io/managed-by": "serverless-engine",
+				"app.kubernetes.io/managed-by": "sep-engine",
 				"system_id":                    req.SystemID,
 				"task_id":                      req.TaskID,
 			},
@@ -131,7 +131,7 @@ func (l *JobLauncher) buildJobSpec(req model.RunRequest, targetNs string, reqRes
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
-						"app.kubernetes.io/managed-by": "serverless-engine",
+						"app.kubernetes.io/managed-by": "sep-engine",
 						"system_id":                    req.SystemID,
 						"task_id":                      req.TaskID,
 					},

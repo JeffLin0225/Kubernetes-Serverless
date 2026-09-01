@@ -14,7 +14,7 @@ type Config struct {
 	Cleaner CleanerConfig
 }
 
-// EngineConfig - Serverless Engine 微服務專屬配置
+// EngineConfig - SEP Engine (Serverless Execution Platform) 微服務專屬配置
 type EngineConfig struct {
 	Namespace       string
 	Port            string
@@ -22,28 +22,16 @@ type EngineConfig struct {
 	SystemQuotasCM  string // 配額 ConfigMap 名稱
 }
 
-// CleanerConfig - 異常 Pod 收割微服務專屬配置
+// CleanerConfig - SEP 異常 Pod 收割微服務專屬配置
 type CleanerConfig struct {
 	TargetNamespace string
 	ScanInterval    time.Duration
 }
 
-// // LoadConfig 載入全專案設定
-// func LoadConfig() *Config {
-// 	// 支援載入當前目錄或上一層根目錄的 .env
-// 	if err := godotenv.Load(".env", "../.env"); err != nil {
-// 		log.Println("[INFO] 未找到 engine .env 檔，將使用系統環境變數（K8s 模式）")
-// 	}
-
-// 	return &Config{
-// 		Engine:  loadEngineConfig(),
-// 		Cleaner: loadCleanerConfig(),
-// 	}
-// }
-
 // LoadEngineConfig 專門載入 Engine 微服務設定
 func LoadEngineConfig() *EngineConfig {
-	if err := godotenv.Load(".env", "../.env"); err != nil {
+	// godotenv.Load() 的機制是：「如果系統環境變數已經存在，它不會用 .env 去覆蓋它」。
+	if err := godotenv.Load(".env", "../.env", "../../.env"); err != nil {
 		log.Println("[INFO] 未找到 .env 檔，將使用系統環境變數（K8s 模式）")
 	}
 	cfg := loadEngineConfig()
@@ -52,7 +40,7 @@ func LoadEngineConfig() *EngineConfig {
 
 // LoadCleanerConfig 專門載入 Cleaner 微服務設定
 func LoadCleanerConfig() *CleanerConfig {
-	if err := godotenv.Load(".env", "../.env"); err != nil {
+	if err := godotenv.Load(".env", "../.env", "../../.env"); err != nil {
 		log.Println("[INFO] 未找到 cleaner .env 檔，將使用系統環境變數（K8s 模式）")
 	}
 	cfg := loadCleanerConfig()
@@ -61,16 +49,16 @@ func LoadCleanerConfig() *CleanerConfig {
 
 func loadEngineConfig() EngineConfig {
 	return EngineConfig{
-		Namespace:       getEnv("NAMESPACE", "default"),
+		Namespace:       getEnv("NAMESPACE", "ns-sep"),
 		Port:            getEnv("PORT", "8080"),
 		ImagePullPolicy: getEnv("IMAGE_PULL_POLICY", "Never"),
-		SystemQuotasCM:  getEnv("SYSTEM_QUOTAS_CONFIGMAP", "serverless-system-quotas"),
+		SystemQuotasCM:  getEnv("SYSTEM_QUOTAS_CONFIGMAP", "sep-system-quotas"),
 	}
 }
 
 func loadCleanerConfig() CleanerConfig {
 	return CleanerConfig{
-		TargetNamespace: getEnv("TARGET_NAMESPACE", ""),
+		TargetNamespace: getEnv("TARGET_NAMESPACE", "ns-sep"),
 		ScanInterval:    getDurationEnv("SCAN_INTERVAL", 5*time.Second),
 	}
 }

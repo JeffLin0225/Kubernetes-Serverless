@@ -5,7 +5,7 @@ import (
 	"log"
 	"time"
 
-	"kubernetes-serverless/common/config"
+	"sep/common/config"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"

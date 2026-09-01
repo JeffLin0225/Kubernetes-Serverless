@@ -7,9 +7,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"kubernetes-serverless/common/config"
-	"kubernetes-serverless/common/kube"
-	"kubernetes-serverless/services/cleaner/service"
+	"sep/common/config"
+	"sep/common/kube"
+	"sep/services/cleaner/service"
 )
 
 func main() {

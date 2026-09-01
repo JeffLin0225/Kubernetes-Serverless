@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: serverless-resource # 該 Namespace 下的唯一名稱
+  namespace: ns-serverless  # ConfigMap 所屬的命名空間
+  labels:
+    app: serverless-system # 標籤選擇器，用於過濾資源
+    env: dev
+
+data:  # ConfigMap 中的鍵值對
+
+  
