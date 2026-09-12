@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.quotas.configMapName | default "sep-system-quotas" }}
+  namespace: {{ .Values.global.namespace | default "ns-sep" }}
+  labels:
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: sep
+
+data:
+  {{- range $systemName, $quota := .Values.quotas.systems }}
+  # {{ $systemName }} 系統配額
+  {{ $systemName }}.cpu_request: {{ $quota.cpu_request | quote }}
+  {{ $systemName }}.memory_request: {{ $quota.memory_request | quote }}
+  {{ $systemName }}.cpu_limit: {{ $quota.cpu_limit | quote }}
+  {{ $systemName }}.memory_limit: {{ $quota.memory_limit | quote }}
+  {{- end }}
