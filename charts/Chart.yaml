@@ -1,3 +1,6 @@
+# 地位就相當於 Node.js 的 package.json 或 Python 的 pyproject.toml
+# helm install my-sep ./charts
+
 # v2（Helm 3 的標準）。 (如果是舊版 Helm 2 才是 v1，現在一律寫 v2)
 apiVersion: v2
 

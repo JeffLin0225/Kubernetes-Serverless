@@ -1,2 +1,29 @@
-apiVersion: v1
-kind:
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Chart.Name }}-engine
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: {{ .Chart.Name }}-engine
+
+spec:
+  replicas: {{ .Values.engine.replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Chart.Name }}-engine
+  template:
+    metadata:
+      labels:
+        app: {{ .Chart.Name }}-engine
+    spec:
+      containers:
+        - name: engine
+          image: "{{ .Values.engine.image.repository}}:{{ .Values.engine.image.tag }}"
+          imagePullPolicy: {{ .Values.engine.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.engine.port }}
+          env:
+            - name: PORT
+              value: "{{ .Values.engine.port }}"
+            - name: NAMESPACE
+              value: "{{ .Values.global.namespace }}"
