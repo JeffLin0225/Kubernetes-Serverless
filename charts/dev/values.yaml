@@ -1,0 +1,14 @@
+global:
+  namespace: ns-sep-dev
+
+quotas:
+  systems:
+    # 只把 crawler 的資源改小，其他吃預設 value.yaml
+    crawler:
+      cpu_request: "100m"
+      memory_request: "128Mi"
+      cpu_limit: "250m"
+      memory_limit: "256Mi"
+
+engine:
+  replicas: 1
