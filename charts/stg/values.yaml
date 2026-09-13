@@ -1,0 +1,25 @@
+global:
+  namespace: ns-sep-stg
+
+quotas:
+  systems:
+    crawler:
+      cpu_request: "100m"
+      memory_request: "128Mi"
+      cpu_limit: "250m"
+      memory_limit: "256Mi"
+
+engine:
+  replicas: 1
+  port: 8080
+  image:
+    repository: sep-engine
+    tag: stg
+    pullPolicy: Never
+  resource:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"

@@ -1,2 +1,36 @@
-apiVersion: v1
-kind:
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Chart.Name }}-engine
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: {{ .Chart.Name }}-engine
+
+spec:
+  replicas: {{ .Values.engine.replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Chart.Name }}-engine
+  template:
+    metadata:
+      labels:
+        app: {{ .Chart.Name }}-engine
+    spec:
+      containers:
+        - name: engine
+          image: "{{ .Values.engine.image.repository}}:{{ .Values.engine.image.tag }}"
+          imagePullPolicy: {{ .Values.engine.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.engine.port }}
+          # 1. 掛載隨身碟到容器內
+          volumeMounts:
+            - name: env-volume
+              mountPath: /app/.env
+              subPath: .env
+        # 2. 隨身碟來源：CI/CD 建立的 ConfigMap
+          resources:
+            {{- toYaml .Values.engine.resource | nindent 12 }}
+      volumes:
+        - name: env-volume
+          configMap:
+            name: {{ .Chart.Name }}-engine-env
