@@ -22,8 +22,15 @@ spec:
           imagePullPolicy: {{ .Values.engine.image.pullPolicy }}
           ports:
             - containerPort: {{ .Values.engine.port }}
-          env:
-            - name: PORT
-              value: "{{ .Values.engine.port }}"
-            - name: NAMESPACE
-              value: "{{ .Values.global.namespace }}"
+          # 1. 掛載隨身碟到容器內
+          volumeMounts:
+            - name: env-volume
+              mountPath: /app/.env
+              subPath: .env
+        # 2. 隨身碟來源：CI/CD 建立的 ConfigMap
+          resources:
+            {{- toYaml .Values.engine.resource | nindent 12 }}
+      volumes:
+        - name: env-volume
+          configMap:
+            name: {{ .Chart.Name }}-engine-env
