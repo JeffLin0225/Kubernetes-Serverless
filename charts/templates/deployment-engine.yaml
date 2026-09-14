@@ -27,10 +27,11 @@ spec:
             - name: env-volume
               mountPath: /app/.env
               subPath: .env
-        # 2. 隨身碟來源：CI/CD 建立的 ConfigMap
+        # 2. 容器硬體資源限制 (CPU / Memory)
           resources:
             {{- toYaml .Values.engine.resource | nindent 12 }}
+      # 3. 隨身碟來源：CI/CD 建立的 ConfigMap
       volumes:
         - name: env-volume
           configMap:
-            name: {{ .Chart.Name }}-engine-env
+            name: {{ .Chart.Name }}-engine-cm
