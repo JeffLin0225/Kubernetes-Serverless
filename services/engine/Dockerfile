@@ -1,5 +1,5 @@
 # 階段 1：編譯環境
-FROM golang:1.24-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 WORKDIR /app
 
@@ -14,7 +14,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -o /app/engine-bin ./services/engine
 
 # 階段 2：輕量運行環境（只有 10~15MB） ====
-FROM alpine:3.20 
+FROM alpine:3.20
 
 WORKDIR /app
 

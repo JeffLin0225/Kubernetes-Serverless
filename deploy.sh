@@ -14,7 +14,7 @@ ENV=${1:-stg}
 BUILD_FLAG=$2
 
 NAMESPACE="ns-sep-${ENV}"
-CONFIGMAP_NAME="sep-engine-env"
+CONFIGMAP_NAME="sep-engine-cm"
 ENV_FILE="services/engine/.env.${ENV}"
 
 echo "============================================================"
@@ -37,9 +37,14 @@ else
   echo "⏩ [1/4] 跳過 Docker 打包（若需要重新打包請加參數: ./deploy.sh ${ENV} --build）"
 fi
 
-# 3. 確保 Namespace 存在（冪等性，已存在不會報錯）
-echo "☸️  [2/4] 確認 Namespace '${NAMESPACE}' ..."
-kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
+# 3. 確認 Namespace 已存在（需預先建立，部署腳本不負責建立 namespace）
+echo "☸️  [2/4] 確認 Namespace '${NAMESPACE}' 存在..."
+if ! kubectl get namespace "${NAMESPACE}" &>/dev/null; then
+  echo "❌ [Error] Namespace '${NAMESPACE}' 不存在！"
+  echo "請先執行: kubectl create namespace ${NAMESPACE}"
+  exit 1
+fi
+echo "✅ Namespace '${NAMESPACE}' 確認存在"
 
 # 4. CI/CD 打包 .env 為 ConfigMap
 echo "📦 [3/4] 同步 ${ENV_FILE} 至 ConfigMap '${CONFIGMAP_NAME}' ..."
