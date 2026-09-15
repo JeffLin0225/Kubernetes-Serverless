@@ -1,5 +1,5 @@
 ### 環境變數設定（可切換 Local 或 K8s Ingress）
-@baseUrl = http://localhost:8080
+@baseUrl = http://192.168.194.43:8080
 
 ### 1. 健康檢查
 GET {{baseUrl}}/health
