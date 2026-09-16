@@ -12,6 +12,8 @@ quotas:
 engine:
   replicas: 1
   port: 8080
+  service:
+    type: ClusterIP
   image:
     repository: sep-engine
     tag: stg

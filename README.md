@@ -71,7 +71,11 @@ flowchart TB
 │   ├── dev/values.yaml            # Dev 開發環境設定
 │   ├── stg/values.yaml            # Staging 測試環境設定
 │   ├── prod/values.yaml           # Production 正式環境設定
-│   └── templates/                 # K8s 渲染模板 (ConfigMap, Deployments)
+│   └── templates/                 # K8s 渲染模板 (ConfigMap, Deployments, Service)
+│       ├── configmap-quotas.yaml  # 動態配額 ConfigMap 模板
+│       ├── deployment-engine.yaml # Engine API 部署模板
+│       ├── deployment-cleaner.yaml# Cleaner Daemon 部署模板
+│       └── service-engine.yaml    # Engine 固定入口 Service (LoadBalancer / ClusterIP)
 │
 ├── configMap/                     # K8s 基礎設施設定 (純 YAML 模式)
 │   └── system-quotas.yaml         # 各系統 CPU / Memory 配額定義（sep-system-quotas）
@@ -119,13 +123,31 @@ kubectl config current-context
 ```bash
 # 確保 namespace 存在
 kubectl create namespace ns-sep --dry-run=client -o yaml | kubectl apply -f -
+kubectl create namespace ns-sep-stg --dry-run=client -o yaml | kubectl apply -f -
 
-# 套用配額表
+# 套用配額表 (純 YAML 模式)
 kubectl apply -f configMap/system-quotas.yaml
 
 # 確認套用成功
 kubectl get configmap sep-system-quotas -n ns-sep
 ```
+
+### 配置 Kubernetes RBAC 權限（重要）
+當 SEP Engine 部署在 K8s 叢集內部時，需要權限存取 ConfigMap 與動態建立 Job。需為對應 Namespace 的 ServiceAccount 授權：
+
+```bash
+# 選項 A：全叢集授權（推薦本機開發 / Staging 跨環境測試）
+kubectl create clusterrolebinding sep-engine-stg-global-admin \
+  --clusterrole=admin \
+  --serviceaccount=ns-sep-stg:default
+
+# 選項 B：單一 Namespace 隔離授權（符合最小權限規範）
+kubectl create rolebinding default-admin \
+  --clusterrole=admin \
+  --serviceaccount=ns-sep-stg:default \
+  -n ns-sep-stg
+```
+> **原理**：Pod 預設以 `default` ServiceAccount 運行。未授權時存取 K8s API 會引發 `403 Forbidden`。
 
 ---
 
@@ -153,6 +175,48 @@ go run ./services/cleaner
 ```
 
 > **注意**：Cleaner 為純背景 Worker，不需要開任何 Port，無需建立 K8s Service 或 Ingress。
+
+---
+
+## Kubernetes 叢集部署（Helm 模式）
+
+專案內建一鍵部署腳本 `deploy.sh`，整合了 ConfigMap 同步、Helm 渲染部署與 Deployment 優雅重啟：
+
+### 1. 執行部署
+```bash
+# 基本部署：同步 .env 至 ConfigMap 並執行 Helm upgrade/install
+./deploy.sh stg
+
+# 完整部署：包含本地 Docker Image 重新打包 (改動 Go 程式碼時使用)
+./deploy.sh stg --build
+```
+
+### 2. 服務發現與固定入口（Service 架構）
+為了解決 Pod 重啟 / 滾動更新時動態 IP 變動的問題，架構在 Engine 前方配置了 Kubernetes Service（`sep-engine-svc`，類型預設為 `LoadBalancer`）：
+
+```text
+[外部呼叫端 / Prefect] 
+       │
+       ▼ (固定門牌 IP / 網域名稱)
+[Kubernetes Service: sep-engine-svc]
+       │
+       ├─► 負載均衡分流至 Engine Pod 1
+       └─► 負載均衡分流至 Engine Pod 2
+```
+
+**連線與測試管道：**
+- **OrbStack 外部 IP 直連**：`kubectl get svc -n ns-sep-stg` 取得 `EXTERNAL-IP`（如 `http://192.168.139.2:8080`）。
+- **K8s 叢集內部 CoreDNS**：內部微服務可直接存取 `http://sep-engine-svc:8080` 或完整 FQDN `http://sep-engine-svc.ns-sep-stg.svc.cluster.local:8080`。
+- **本地域名模擬 (/etc/hosts)**：
+  ```bash
+  echo "192.168.139.2  sep.local" | sudo tee -a /etc/hosts
+  curl http://sep.local:8080/health
+  ```
+- **本機 Port-Forward 穩定連線**：
+  ```bash
+  kubectl port-forward -n ns-sep-stg svc/sep-engine-svc 8080:8080
+  curl http://localhost:8080/health
+  ```
 
 ---
 
@@ -215,27 +279,55 @@ crawler.memory_limit: "1Gi"
 
 ## 常用維運指令
 
+### 1. 服務與網路診斷（Service & Pod IP）
+```bash
+# 查詢 Pod 運行節點與內部 IP（-o wide）
+kubectl get pods -n ns-sep-stg -o wide
+
+# 查詢 Service 門牌與分配之 LoadBalancer External-IP
+kubectl get svc -n ns-sep-stg
+
+# 【實用】利用標籤一次打包查詢 Engine 家族所有元件 (Pod, Svc, Deployment, ReplicaSet, ConfigMap)
+kubectl get all,cm -n ns-sep-stg -l app=sep-engine
+
+# 驗證 K8s 內部 CoreDNS 解析與 Service 轉發（啟動臨時容器測試）
+kubectl run test-dns --rm -it --image=curlimages/curl --restart=Never -n ns-sep-stg \
+  -- curl -s http://sep-engine-svc:8080/health
+```
+
+### 2. 任務 Job 與 Pod 生命週期查詢
 ```bash
 # 查看 SEP 配額 ConfigMap
-kubectl get configmap sep-system-quotas -n ns-sep
+kubectl get configmap sep-system-quotas -n ns-sep-stg
 
 # 查看目前由 SEP Engine 建立的 Job 與 Pod（以 system_id 標籤篩選）
-kubectl get jobs -n ns-sep -l system_id
-kubectl get pods -n ns-sep -l system_id
+kubectl get jobs -n ns-sep-stg -l system_id
+kubectl get pods -n ns-sep-stg -l system_id
 
 # 將 system_id / task_id 展開為獨立欄位顯示（一目瞭然）
-kubectl get pods -n ns-sep -L system_id,task_id
+kubectl get pods -n ns-sep-stg -L system_id,task_id
 
 # 針對特定系統或任務查詢
-kubectl get pods -n ns-sep -l system_id=crawler
-kubectl get pods -n ns-sep -l task_id=flow-run-abc123
+kubectl get pods -n ns-sep-stg -l system_id=crawler
+kubectl get pods -n ns-sep-stg -l task_id=flow-run-test-001
 
 # 一鍵清除所有 Engine 管理的 Job（Cleaner 通常會自動處理，手動清除時使用）
-kubectl delete jobs -n ns-sep -l system_id
+kubectl delete jobs -n ns-sep-stg -l system_id
 
-# 查看 Pod 詳細資訊與 Log
-kubectl describe pod <pod-name> -n ns-sep
-kubectl logs <pod-name> -n ns-sep
+# 查看 Pod 詳細資訊與即時 Log
+kubectl describe pod <pod-name> -n ns-sep-stg
+kubectl logs -f <pod-name> -n ns-sep-stg
+```
+
+### 3. RBAC 權限維護
+```bash
+# 賦予 default 帳號跨 Namespace 最高管理權限（開發模式通用）
+kubectl create clusterrolebinding sep-engine-stg-global-admin \
+  --clusterrole=admin \
+  --serviceaccount=ns-sep-stg:default
+
+# 查詢當前 RoleBinding 狀態
+kubectl get rolebinding,clusterrolebinding | grep sep-engine
 ```
 
 ---
