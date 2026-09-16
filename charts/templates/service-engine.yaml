@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Chart.Name }}-engine-svc
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: {{ .Chart.Name }}-engine # 想快速把 engine 的找出來時，可以下： kubectl get svc -l app=sep-engine
+
+spec:
+  type: LoadBalancer  # 決定這個要開放到什麼範圍
+  # type: {{ .Values.engine.service.type }} # macOS 會被擋
+  selector:
+    app: {{ .Chart.Name }}-engine # 把身上貼有 app: sep-engine 標籤的 Pod 通通抓進來當的後端
+  ports:
+    - name: http
+      port: {{ .Values.engine.port }} # 外面打進來的 Port
+      targetPort: {{ .Values.engine.port }} # 封包轉發進 Pod 容器時，容器內部監聽的 Port
+
