@@ -9,8 +9,12 @@ import (
 )
 
 func SetupRouter(cfg *config.EngineConfig, jobLauncher *service.JobLauncher) *gin.Engine {
+
 	// 初始化 Gin 引擎
 	r := gin.Default()
+
+	// 關閉信任所有代理 (消除安全警告，直連模式)
+	_ = r.SetTrustedProxies(nil)
 
 	runCtrl := controller.NewRunController(jobLauncher)
 
