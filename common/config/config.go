@@ -30,8 +30,14 @@ type CleanerConfig struct {
 
 // LoadEngineConfig 專門載入 Engine 微服務設定
 func LoadEngineConfig() *EngineConfig {
-	// godotenv.Load() 的機制是：「如果系統環境變數已經存在，它不會用 .env 去覆蓋它」。
-	if err := godotenv.Load(".env", "../.env", "../../.env"); err != nil {
+	loaded := false
+	for _, path := range []string{".env", "../.env", "../../.env"} {
+		if err := godotenv.Load(path); err == nil {
+			loaded = true
+			break
+		}
+	}
+	if !loaded {
 		log.Println("[INFO] 未找到 .env 檔，將使用系統環境變數（K8s 模式）")
 	}
 	cfg := loadEngineConfig()
@@ -40,7 +46,14 @@ func LoadEngineConfig() *EngineConfig {
 
 // LoadCleanerConfig 專門載入 Cleaner 微服務設定
 func LoadCleanerConfig() *CleanerConfig {
-	if err := godotenv.Load(".env", "../.env", "../../.env"); err != nil {
+	loaded := false
+	for _, path := range []string{".env", "../.env", "../../.env"} {
+		if err := godotenv.Load(path); err == nil {
+			loaded = true
+			break
+		}
+	}
+	if !loaded {
 		log.Println("[INFO] 未找到 cleaner .env 檔，將使用系統環境變數（K8s 模式）")
 	}
 	cfg := loadCleanerConfig()

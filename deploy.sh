@@ -63,6 +63,7 @@ helm upgrade --install sep ./charts \
 # 6. 優雅滾動重啟 Pod（確保一定吃到最新的 ConfigMap 與 Image）
 echo "🔄 [Reload] 正在觸發 Deployment 滾動重啟以套用最新設定..."
 kubectl rollout restart deployment/sep-engine -n "${NAMESPACE}" 2>/dev/null || true
+kubectl rollout status deployment/sep-engine -n "${NAMESPACE}" --timeout=60s || true
 
 echo "============================================================"
 echo "🎉 部署完成！查看當前 Pod 運行狀態："

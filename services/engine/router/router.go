@@ -1,6 +1,8 @@
 package router
 
 import (
+	"os"
+
 	"sep/common/config"
 	"sep/services/engine/controller"
 	"sep/services/engine/service"
@@ -9,6 +11,10 @@ import (
 )
 
 func SetupRouter(cfg *config.EngineConfig, jobLauncher *service.JobLauncher) *gin.Engine {
+	// 根據 GIN_MODE 切換模式
+	if os.Getenv("GIN_MODE") == "release" {
+		gin.SetMode(gin.ReleaseMode)
+	}
 
 	// 初始化 Gin 引擎
 	r := gin.Default()
