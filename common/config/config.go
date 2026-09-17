@@ -70,8 +70,16 @@ func loadEngineConfig() EngineConfig {
 }
 
 func loadCleanerConfig() CleanerConfig {
+	// LookupEnv 可以區分「沒設定」跟「設定成空字串」兩種情況：
+	// - 沒設定（本機開發未帶 .env）→ 使用預設值 "ns-sep"（只掃本機叢集）
+	// - 設定成空字串 (TARGET_NAMESPACE=) → 代表掃全叢集所有 Namespace
+	targetNamespace := "ns-sep" // 預設：本機開發用
+	if val, ok := os.LookupEnv("TARGET_NAMESPACE"); ok {
+		targetNamespace = val // 有設定（含空字串）就直接用，空字串 = 全叢集
+	}
+
 	return CleanerConfig{
-		TargetNamespace: getEnv("TARGET_NAMESPACE", "ns-sep"),
+		TargetNamespace: targetNamespace,
 		ScanInterval:    getDurationEnv("SCAN_INTERVAL", 5*time.Second),
 	}
 }

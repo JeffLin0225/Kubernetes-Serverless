@@ -63,7 +63,7 @@ func (s *CleanerService) scanAndClean(parentCtx context.Context) {
 	// 過濾由 Serverless Engine 發起的 Pods（支援 system_id 標籤或 managed-by 標籤）
 	// （相當於 SQL 的 WHERE 條件 或 kubectl 指令的篩選參數）
 	listOptions := metav1.ListOptions{
-		LabelSelector: "system_id",
+		LabelSelector: "app.kubernetes.io/managed-by=sep-engine",
 	}
 
 	pods, err := s.client.CoreV1().Pods(s.namespace).List(ctx, listOptions)
