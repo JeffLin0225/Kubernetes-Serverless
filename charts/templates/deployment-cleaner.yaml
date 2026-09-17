@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Chart.Name }}-cleaner
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: {{ .Chart.Name }}-cleaner
+
+spec:
+  replicas: {{ .Values.cleaner.replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Chart.Name }}-cleaner
+  template:
+    metadata:
+      labels:
+        app: {{ .Chart.Name }}-cleaner
+    spec:
+      serviceAccountName: {{ .Chart.Name }}-sa # RBAC
+      containers:
+        - name: cleaner
+          image: "{{ .Values.cleaner.image.repository }}:{{ .Values.cleaner.image.tag }}"
+          imagePullPolicy: {{ .Values.cleaner.image.pullPolicy }}
+          # 掛載 .env 到容器
+          volumeMounts:
+            - name: env-volume
+              mountPath: /app/.env
+              subPath: .env
+          # 容器資源
+          resources:
+            {{- toYaml .Values.cleaner.resources | nindent 12 }}
+      volumes:
+        - name: env-volume
+          configMap:
+            name: {{ .Chart.Name }}-cleaner-cm
+

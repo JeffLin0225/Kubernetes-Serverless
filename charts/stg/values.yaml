@@ -25,3 +25,17 @@ engine:
     limits:
       cpu: "500m"
       memory: "512Mi"
+
+cleaner:
+  replicas: 1
+  image:
+    repository: sep-cleaner
+    tag: stg
+    pullPolicy: Never
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
