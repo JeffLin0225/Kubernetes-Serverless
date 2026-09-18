@@ -3,7 +3,7 @@ global:
 
 quotas:
   systems:
-    # 只把 crawler 的資源改小，其他吃預設 value.yaml
+    # dev 環境把 crawler 資源調小
     crawler:
       cpu_request: "100m"
       memory_request: "128Mi"
@@ -12,3 +12,12 @@ quotas:
 
 engine:
   replicas: 1
+  # ── dev 覆寫 env（只寫跟預設不同的） ──
+  env:
+    LOG_LEVEL: "debug"         # dev 才開 debug
+    GIN_MODE: "debug"
+
+cleaner:
+  env:
+    LOG_LEVEL: "debug"
+    SCAN_INTERVAL: "5s"        # dev 掃快一點方便測試

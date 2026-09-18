@@ -5,6 +5,9 @@ metadata:
   namespace: {{ .Values.global.namespace }}
   labels:
     app: {{ .Chart.Name }}-engine
+  annotations:
+    # ConfigMap 內容變動時自動觸發滾動重啟（不需要手動 kubectl rollout restart）
+    checksum/config: {{ include (print $.Template.BasePath "/configmap-engine.yaml") . | sha256sum }}
 
 spec:
   replicas: {{ .Values.engine.replicas }}
@@ -23,16 +26,18 @@ spec:
           imagePullPolicy: {{ .Values.engine.image.pullPolicy }}
           ports:
             - containerPort: {{ .Values.engine.port }}
-          # 1. 掛載隨身碟到容器內
-          volumeMounts:
-            - name: env-volume
-              mountPath: /app/.env
-              subPath: .env
-        # 2. 容器硬體資源限制 (CPU / Memory)
+
+          # ── 環境變數注入（大規模做法）──────────────────
+          # 1. 非機密 config（由 Helm 管的 ConfigMap）
+          envFrom:
+            - configMapRef:
+                name: {{ .Chart.Name }}-engine-cm
+          # 2. 機密值（由 SP 手動建立的 Secret，enabled 才掛）
+          {{- if .Values.engine.secret.enabled }}
+            - secretRef:
+                name: {{ .Values.engine.secret.name }}
+          {{- end }}
+
+          # ── 資源限制 ────────────────────────────────────
           resources:
             {{- toYaml .Values.engine.resource | nindent 12 }}
-      # 3. 隨身碟來源：CI/CD 建立的 ConfigMap
-      volumes:
-        - name: env-volume
-          configMap:
-            name: {{ .Chart.Name }}-engine-cm

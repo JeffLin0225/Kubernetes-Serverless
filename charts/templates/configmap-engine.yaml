@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Chart.Name }}-engine-cm
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: {{ .Chart.Name }}-engine
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  annotations:
+    # ConfigMap 內容的 checksum，讓 values 變動時自動觸發 Pod 滾動重啟
+    # 搭配 deployment 的 checksum annotation 使用
+    helm.sh/resource-policy: keep
+
+data:
+  # ── 非機密業務參數 ──────────────────────────────
+  # 機密值（DB 密碼 / JWT Secret）請用 K8s Secret 另外管理
+  # 透過 values.yaml / {ENV}/values.yaml 覆寫
+  {{- range $key, $val := .Values.engine.env }}
+  {{ $key }}: {{ $val | quote }}
+  {{- end }}

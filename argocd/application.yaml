@@ -1,0 +1,42 @@
+# ============================================================
+# ArgoCD Application - GitOps 大規模部署設定
+# ============================================================
+# ArgoCD 會持續監控 git repo，當 charts/ 或 values.yaml 有變動時
+# 自動 sync 到 K8s，不需要手動跑 deploy.sh
+#
+# 部署方式：
+#   kubectl apply -f argocd/application.yaml -n argocd
+# ============================================================
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: sep-dev
+  namespace: argocd
+  labels:
+    env: dev
+spec:
+  project: default
+
+  # ── Git 來源 ─────────────────────────────────────────────
+  source:
+    repoURL: https://github.com/your-org/serverless   # ← 換成你的 repo
+    targetRevision: main
+    path: charts
+    helm:
+      valueFiles:
+        - values.yaml
+        - dev/values.yaml
+
+  # ── 部署目標 ─────────────────────────────────────────────
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ns-sep-dev
+
+  # ── Sync 策略 ────────────────────────────────────────────
+  syncPolicy:
+    automated:
+      prune: true        # git 刪掉的資源，K8s 也自動刪
+      selfHeal: true     # 有人手動改 K8s，ArgoCD 自動還原回 git 狀態
+    syncOptions:
+      - CreateNamespace=false    # namespace 需預先建立
+      - ServerSideApply=true

@@ -32,7 +32,6 @@ quotas:
 
 # ========================================
 #  3. SEP Engine 微服務配置
-# (本身服務的配置)
 # ========================================
 engine:
   replicas: 1
@@ -41,10 +40,31 @@ engine:
     repository: sep-engine
     tag: latest
     pullPolicy: Never
+  resource:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+  # ----------------------------------------
+  # 非機密業務參數（可進 git）
+  # 機密值（DB_PASSWORD / JWT_SECRET）請用 K8s Secret
+  # ----------------------------------------
+  env:
+    LOG_LEVEL: "info"
+    JOB_TIMEOUT: "30s"
+    MAX_RETRY: "3"
+    GIN_MODE: "release"
+  # ----------------------------------------
+  # 是否掛載 Secret（由 SP 人員手動建立）
+  # ----------------------------------------
+  secret:
+    enabled: false              # prod 改為 true
+    name: "sep-engine-secret"
 
 # ========================================
 #  4. SEP Cleaner 微服務配置
-# (本身服務的配置)
 # ========================================
 cleaner:
   replicas: 1
@@ -53,3 +73,20 @@ cleaner:
     repository: sep-cleaner
     tag: latest
     pullPolicy: Never
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+  # ----------------------------------------
+  # 非機密業務參數（可進 git）
+  # ----------------------------------------
+  env:
+    LOG_LEVEL: "info"
+    SCAN_INTERVAL: "10s"
+    MAX_CLEAN_BATCH: "50"
+  secret:
+    enabled: false
+    name: "sep-cleaner-secret"

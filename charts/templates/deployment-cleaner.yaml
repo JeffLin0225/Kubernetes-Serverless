@@ -5,6 +5,8 @@ metadata:
   namespace: {{ .Values.global.namespace }}
   labels:
     app: {{ .Chart.Name }}-cleaner
+  annotations:
+    checksum/config: {{ include (print $.Template.BasePath "/configmap-cleaner.yaml") . | sha256sum }}
 
 spec:
   replicas: {{ .Values.cleaner.replicas }}
@@ -21,16 +23,16 @@ spec:
         - name: cleaner
           image: "{{ .Values.cleaner.image.repository }}:{{ .Values.cleaner.image.tag }}"
           imagePullPolicy: {{ .Values.cleaner.image.pullPolicy }}
-          # 掛載 .env 到容器
-          volumeMounts:
-            - name: env-volume
-              mountPath: /app/.env
-              subPath: .env
-          # 容器資源
+
+          # ── 環境變數注入 ────────────────────────────────
+          envFrom:
+            - configMapRef:
+                name: {{ .Chart.Name }}-cleaner-cm
+          {{- if .Values.cleaner.secret.enabled }}
+            - secretRef:
+                name: {{ .Values.cleaner.secret.name }}
+          {{- end }}
+
+          # ── 資源限制 ────────────────────────────────────
           resources:
             {{- toYaml .Values.cleaner.resources | nindent 12 }}
-      volumes:
-        - name: env-volume
-          configMap:
-            name: {{ .Chart.Name }}-cleaner-cm
-
