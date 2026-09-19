@@ -3,6 +3,9 @@
 # ========================================
 global:
   namespace: ns-sep
+  # GHCR Image Pull Secret（遠端 Registry 認證）
+  # 本地開發（pullPolicy: Never）不需要，STG/PROD 會覆蓋
+  imagePullSecrets: []
 
 # ========================================
 # 2. 幫來源系統配額  (Quotas for ConfigMap)

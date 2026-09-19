@@ -1,5 +1,7 @@
 global:
   namespace: ns-sep-stg
+  imagePullSecrets:
+    - name: ghcr-secret
 
 quotas:
   systems:
@@ -15,9 +17,9 @@ engine:
   service:
     type: ClusterIP
   image:
-    repository: sep-engine
-    tag: stg
-    pullPolicy: Never
+    repository: ghcr.io/jefflin0225/kubernetes-serverless/sep-engine
+    tag: latest               # ← deploy.sh 執行時用 --set 覆蓋為 sha-xxx
+    pullPolicy: IfNotPresent
   resource:
     requests:
       cpu: "100m"
@@ -29,9 +31,9 @@ engine:
 cleaner:
   replicas: 1
   image:
-    repository: sep-cleaner
-    tag: stg
-    pullPolicy: Never
+    repository: ghcr.io/jefflin0225/kubernetes-serverless/sep-cleaner
+    tag: latest               # ← deploy.sh 執行時用 --set 覆蓋為 sha-xxx
+    pullPolicy: IfNotPresent
   resources:
     requests:
       cpu: "100m"

@@ -1,0 +1,63 @@
+# ============================================================
+# ArgoCD Application - SEP PROD 自動部署
+# 用法: kubectl apply -f argocd/application.yaml
+#
+# ArgoCD 會監控 GitHub Repo 的 charts/ 目錄，
+# 當 charts/prod/values.yaml 的 image tag 被 CI 更新時，
+# ArgoCD 自動執行 Helm 部署到 ns-sep-prod Namespace。
+# ============================================================
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: sep-prod
+  namespace: argocd
+  labels:
+    app: sep
+    env: prod
+  # 當 ArgoCD Application 被刪除時，保留已部署的 K8s 資源
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  # 所屬 AppProject（權限隔離）
+  project: sep
+
+  # ============================================================
+  # Source: 從哪裡讀取部署定義
+  # ============================================================
+  source:
+    repoURL: https://github.com/JeffLin0225/Kubernetes-Serverless.git
+    targetRevision: main           # 監控 main branch
+    path: charts                   # Helm Chart 路徑
+
+    # Helm 參數
+    helm:
+      releaseName: sep
+      valueFiles:
+        - values.yaml              # 基礎通用設定
+        - prod/values.yaml         # PROD 環境覆蓋設定
+
+  # ============================================================
+  # Destination: 部署到哪個 K8s 叢集 / Namespace
+  # ============================================================
+  destination:
+    server: https://kubernetes.default.svc   # 本地叢集（OrbStack）
+    namespace: ns-sep-prod
+
+  # ============================================================
+  # Sync Policy: 自動同步策略
+  # ============================================================
+  syncPolicy:
+    automated:
+      prune: true        # Git 中刪除的資源，K8s 上也自動刪除
+      selfHeal: true     # Pod 被手動修改時，自動修復回 Git 定義的狀態
+    syncOptions:
+      - CreateNamespace=true    # Namespace 不存在時自動建立
+      - ApplyOutOfSyncOnly=true # 只同步有變動的資源（效能優化）
+
+    # 自動 Retry（部署失敗時重試）
+    retry:
+      limit: 3
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 3m

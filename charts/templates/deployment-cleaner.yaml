@@ -17,6 +17,10 @@ spec:
         app: {{ .Chart.Name }}-cleaner
     spec:
       serviceAccountName: {{ .Chart.Name }}-sa # RBAC
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: cleaner
           image: "{{ .Values.cleaner.image.repository }}:{{ .Values.cleaner.image.tag }}"

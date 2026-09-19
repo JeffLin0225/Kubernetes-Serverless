@@ -17,6 +17,10 @@ spec:
         app: {{ .Chart.Name }}-engine
     spec:
       serviceAccountName: {{ .Chart.Name }}-sa # RBAC
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: engine
           image: "{{ .Values.engine.image.repository}}:{{ .Values.engine.image.tag }}"

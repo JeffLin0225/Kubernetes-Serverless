@@ -1,0 +1,30 @@
+# ============================================================
+# ArgoCD AppProject - SEP 專案權限隔離
+# 用法: kubectl apply -f argocd/project.yaml
+# ============================================================
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: sep
+  namespace: argocd
+spec:
+  description: SEP (Serverless Execution Platform) 部署專案
+
+  # 允許部署的 Git 來源
+  sourceRepos:
+    - https://github.com/JeffLin0225/Kubernetes-Serverless.git
+
+  # 允許部署的目標叢集與 Namespace
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: ns-sep-prod
+
+  # 允許部署的 K8s 資源類型（全部允許）
+  clusterResourceWhitelist:
+    - group: '*'
+      kind: '*'
+
+  # 允許使用的 Namespace 資源
+  namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'

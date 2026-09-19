@@ -1,0 +1,57 @@
+# ============================================================
+# PROD 環境設定
+# ⚠️ image.tag 由 GitHub Actions CI 自動更新，請勿手動修改
+# ============================================================
+global:
+  namespace: ns-sep-prod
+  imagePullSecrets:
+    - name: ghcr-secret
+
+quotas:
+  systems:
+    crawler:
+      cpu_request: "250m"
+      memory_request: "512Mi"
+      cpu_limit: "500m"
+      memory_limit: "1Gi"
+    reporting:
+      cpu_request: "1000m"
+      memory_request: "2Gi"
+      cpu_limit: "2000m"
+      memory_limit: "4Gi"
+    analytics:
+      cpu_request: "2000m"
+      memory_request: "4Gi"
+      cpu_limit: "4000m"
+      memory_limit: "8Gi"
+
+engine:
+  replicas: 2                 # PROD 雙副本，確保高可用
+  port: 8080
+  service:
+    type: ClusterIP
+  image:
+    repository: ghcr.io/jefflin0225/kubernetes-serverless/sep-engine
+    tag: latest               # ← CI 自動更新此欄位（ArgoCD 偵測變動後自動部署）
+    pullPolicy: IfNotPresent
+  resource:
+    requests:
+      cpu: "250m"
+      memory: "256Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"
+
+cleaner:
+  replicas: 1
+  image:
+    repository: ghcr.io/jefflin0225/kubernetes-serverless/sep-cleaner
+    tag: latest               # ← CI 自動更新此欄位（ArgoCD 偵測變動後自動部署）
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"

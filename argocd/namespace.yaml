@@ -1,0 +1,18 @@
+# ============================================================
+# ArgoCD Namespace & PROD Namespace
+# 用法: kubectl apply -f argocd/namespace.yaml
+# ============================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: argocd
+  labels:
+    app.kubernetes.io/managed-by: argocd
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ns-sep-prod
+  labels:
+    app: sep
+    env: prod

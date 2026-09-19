@@ -1,0 +1,145 @@
+# ============================================================
+# SEP CI Pipeline - Build & Push Docker Image to GHCR
+# 存放位置: .github/workflows/ci.yml
+#
+# 觸發條件:
+#   - push 到 main    → 打包 prod image + 自動更新 prod values tag
+#   - push 到 develop → 打包 stg image
+#
+# 產出: Docker Image 推送至 GitHub Container Registry (GHCR)
+# ============================================================
+
+name: CI - Build & Push
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths-ignore:
+      - '**.md'
+      - 'argocd/**'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/jefflin0225/kubernetes-serverless
+
+jobs:
+  # ============================================================
+  # Job 1: Build & Push Docker Images
+  # ============================================================
+  build-and-push:
+    name: 🐳 Build & Push Docker Images
+    runs-on: ubuntu-latest
+
+    # 授權 GITHUB_TOKEN 可推送 Image 到 GHCR
+    permissions:
+      contents: read
+      packages: write
+
+    outputs:
+      image_tag: ${{ steps.tag.outputs.IMAGE_TAG }}
+      env_name: ${{ steps.env.outputs.ENV_NAME }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 根據 branch 決定環境
+      - name: Determine environment
+        id: env
+        run: |
+          if [[ "${{ github.ref_name }}" == "main" ]]; then
+            echo "ENV_NAME=prod" >> $GITHUB_OUTPUT
+          else
+            echo "ENV_NAME=stg" >> $GITHUB_OUTPUT
+          fi
+
+      # 產生 Immutable Image Tag（git SHA 前 7 碼）
+      # 例如: sha-abc1234
+      - name: Generate image tag
+        id: tag
+        run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          IMAGE_TAG="sha-${SHORT_SHA}"
+          echo "IMAGE_TAG=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+          echo "✅ Image Tag: ${IMAGE_TAG}"
+
+      # 登入 GHCR（使用內建 GITHUB_TOKEN，不需額外設定）
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Build & Push sep-engine
+      - name: Build & Push sep-engine
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: services/engine/Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}/sep-engine:${{ steps.tag.outputs.IMAGE_TAG }}
+
+      # Build & Push sep-cleaner
+      - name: Build & Push sep-cleaner
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: services/cleaner/Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}/sep-cleaner:${{ steps.tag.outputs.IMAGE_TAG }}
+
+      - name: ✅ CI Summary
+        run: |
+          echo "============================================"
+          echo "🎉 CI 完成！"
+          echo "  環境: ${{ steps.env.outputs.ENV_NAME }}"
+          echo "  Engine: ${{ env.IMAGE_PREFIX }}/sep-engine:${{ steps.tag.outputs.IMAGE_TAG }}"
+          echo "  Cleaner: ${{ env.IMAGE_PREFIX }}/sep-cleaner:${{ steps.tag.outputs.IMAGE_TAG }}"
+          echo "============================================"
+          echo ""
+          echo "📋 STG 手動部署指令:"
+          echo "  ./deploy.sh stg ${{ steps.tag.outputs.IMAGE_TAG }}"
+
+  # ============================================================
+  # Job 2: 自動更新 PROD values.yaml 的 Image Tag（僅 main branch）
+  # ArgoCD 會偵測到這個 commit 並自動部署
+  # ============================================================
+  update-prod-tag:
+    name: 🔄 Update PROD Image Tag (GitOps)
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.ref_name == 'main'
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install yq
+        uses: mikefarah/yq@master
+
+      - name: Update prod values.yaml
+        run: |
+          IMAGE_TAG="${{ needs.build-and-push.outputs.image_tag }}"
+          echo "📝 更新 prod image tag 為: ${IMAGE_TAG}"
+
+          yq -i ".engine.image.tag = \"${IMAGE_TAG}\"" charts/prod/values.yaml
+          yq -i ".cleaner.image.tag = \"${IMAGE_TAG}\"" charts/prod/values.yaml
+
+      - name: Commit & Push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add charts/prod/values.yaml
+          git diff --staged --quiet && echo "No changes" && exit 0
+          git commit -m "chore(cd): update prod image tag to ${{ needs.build-and-push.outputs.image_tag }} [skip ci]"
+          git push
