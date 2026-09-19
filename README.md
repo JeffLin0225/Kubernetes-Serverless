@@ -350,3 +350,205 @@ kubectl get rolebinding,clusterrolebinding | grep sep-engine
 |------|------|------|
 | `TARGET_NAMESPACE` | 監控目標 Namespace（空字串代表跨全叢集監控） | `ns-sep` |
 | `SCAN_INTERVAL` | 異常 Pod 巡檢週期，需帶單位（如 `5s`、`30s`、`1m`） | `5s` |
+
+---
+
+## 來源系統接入規範（Source System Integration Spec）
+
+> 本章節定義所有接入 SEP 的來源系統（如爬蟲、報表、分析等）在 CI/CD 流程與 Image 管理上必須遵守的設計規範。
+> SEP Engine 完全信任來源端傳入的 `image` 欄位，因此**版本安全閘門的責任在來源端**，而非 SEP。
+
+---
+
+### 核心設計原則
+
+```
+SEP 的職責：接受請求、查配額、建 Job            ← 不變
+來源端的職責：決定「此刻該跑哪個版本的 Image」   ← 由來源端自己管理
+```
+
+兩者職責分離，SEP 無需理解任何來源系統的 CI/CD 時程邏輯。
+
+---
+
+### 一、Image Tag 命名規範
+
+#### ❌ 禁止使用 Mutable Tag
+
+| 禁止 | 原因 |
+|------|------|
+| `:latest` | CI 推新 image 後立刻生效，觸發 race condition |
+| `:main`、`:master`、`:dev` | 與分支綁定，同樣是 mutable，每次 push 都會覆蓋 |
+
+#### ✅ 必須使用 Immutable Tag
+
+推薦格式（由最佳到可接受）：
+
+| 格式 | 範例 | 說明 |
+|------|------|------|
+| Git Commit SHA（推薦） | `myapp:git-a3f1c2d` | 最具可追溯性，能直接定位原始碼版本 |
+| SHA + 日期時間 | `myapp:git-a3f1c2d-20260919-1045` | 兼顧可讀性與可追溯性，本專案推薦格式 |
+| Semantic Version | `myapp:v1.2.3` | 適合有正式版號管理的系統 |
+| Image Digest | `myapp@sha256:abc123...` | 最嚴格的 immutable，推薦 Production 使用 |
+
+**CI Pipeline 範例（GitHub Actions）：**
+```yaml
+# .github/workflows/ci.yml
+- name: Build & Push Image
+  env:
+    GIT_SHA: ${{ github.sha }}
+    BUILD_TIME: ${{ steps.date.outputs.date }}   # 格式：YYYYMMDD-HHmm
+  run: |
+    IMAGE_TAG="git-${GIT_SHA::7}-${BUILD_TIME}"
+    docker build -t myapp:${IMAGE_TAG} .
+    docker push myapp:${IMAGE_TAG}
+    echo "IMAGE_TAG=${IMAGE_TAG}" >> $GITHUB_OUTPUT  # 傳給後續步驟
+```
+
+---
+
+### 二、來源端 ConfigMap 設計（版本閘門）
+
+來源系統需在自己的 Namespace 維護一個 ConfigMap，作為「**當前已上線（CD 完成）的 Image Tag**」的唯一來源。
+
+#### ConfigMap 結構範例
+
+```yaml
+# source-system/k8s/app-config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: crawler-app-config        # 各系統自行命名，與 SEP 無關
+  namespace: ns-crawler           # 來源系統自己的 Namespace
+data:
+  # SEP 接入版本閘門
+  current_image: "myapp:git-a3f1c2d-20260919-1045"   # CD 完成後才更新此欄位
+
+  # 可依需求加入其他設定（與 SEP 無關）
+  env: "production"
+  log_level: "info"
+```
+
+> **重要**：`current_image` 只在 **CD 完成後**才更新。CI 階段嚴禁修改此欄位。
+
+---
+
+### 三、CI / CD 各階段責任分工
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    來源系統 CI 階段（只做建置）                        │
+│                                                                     │
+│  1. 編譯 / 測試 / 掃描                                               │
+│  2. docker build → push myapp:git-a3f1c2d-20260919-1045            │
+│  3. ✅ 結束。ConfigMap 不動，Prefect 排程繼續跑舊版                    │
+└─────────────────────────────────────────────────────────────────────┘
+              ↓ （人工審核 / 自動 Gate 通過後才觸發）
+┌─────────────────────────────────────────────────────────────────────┐
+│                    來源系統 CD 階段（部署上線）                        │
+│                                                                     │
+│  1. 執行 DB Migration、環境設定變更等前置作業                          │
+│  2. kubectl patch configmap crawler-app-config \                    │
+│       --patch '{"data":{"current_image":"myapp:git-a3f1c2d-..."}}'  │
+│  3. ✅ 結束。下一次 Prefect 觸發就會用新版 Image                       │
+└─────────────────────────────────────────────────────────────────────┘
+              ↓
+┌─────────────────────────────────────────────────────────────────────┐
+│               來源系統 排程觸發（Prefect / Cron 等）                  │
+│                                                                     │
+│  1. 從 ConfigMap 讀取 current_image                                  │
+│  2. POST /api/run {                                                  │
+│       "system_id": "crawler",                                       │
+│       "task_id":   "flow-run-abc123",                               │
+│       "image":     "myapp:git-a3f1c2d-20260919-1045",  ← 從 CM 讀   │
+│       "command":   ["python", "flow.py"]                            │
+│     }                                                               │
+│  3. SEP Engine 建立 Job，跑的永遠是 CD 已驗證上線的版本               │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Race Condition 防護時序：**
+
+| 時間點 | 事件 | ConfigMap `current_image` | Job 跑的版本 |
+|--------|------|--------------------------|-------------|
+| T1 | CI 推 `git-new-xxx` | `git-old-aaa`（未動） | `git-old-aaa` ✅ |
+| T2 | Prefect 觸發排程 | `git-old-aaa` | `git-old-aaa` ✅（不受影響）|
+| T3 | CD 完成，更新 CM | `git-new-xxx` | — |
+| T4 | 下次 Prefect 觸發 | `git-new-xxx` | `git-new-xxx` ✅ |
+
+CI 今天做、明天才 CD？沒問題，ConfigMap 不依時程，隨時 CD 都安全。
+
+---
+
+### 四、Prefect Flow 讀取 ConfigMap 範例
+
+```python
+# flow.py（Prefect 觸發端）
+from prefect import flow
+from kubernetes import client, config
+
+def get_current_image(namespace: str, cm_name: str, key: str = "current_image") -> str:
+    """從來源系統自己的 ConfigMap 取得當前已上線的 Image Tag"""
+    config.load_incluster_config()   # K8s 叢集內部使用 in-cluster config
+    v1 = client.CoreV1Api()
+    cm = v1.read_namespaced_config_map(name=cm_name, namespace=namespace)
+    return cm.data[key]
+
+@flow
+def trigger_sep_job():
+    image = get_current_image("ns-crawler", "crawler-app-config")
+    # image = "myapp:git-a3f1c2d-20260919-1045"（CD 完成後的版本）
+
+    response = requests.post("http://sep-engine-svc.ns-sep.svc.cluster.local:8080/api/run", json={
+        "system_id": "crawler",
+        "task_id":   prefect.runtime.flow_run.id,
+        "image":     image,   # ← 永遠從 ConfigMap 讀，而非寫死
+        "command":   ["python", "flow.py"]
+    })
+```
+
+---
+
+### 五、設計驗證：是否符合正規 K8s / Helm / CI/CD 規範？
+
+#### ✅ 符合的業界標準
+
+| 規範 | 你的設計 | 業界標準依據 |
+|------|---------|------------|
+| **Immutable Image Tag** | Git SHA + 日期時間 | Google Cloud、AWS ECR、Docker 官方最佳實踐均建議禁用 `:latest` |
+| **CI / CD 職責分離** | CI 只 Build，CD 才改版本閘門 | GitOps（Argo CD / Flux）的核心原則：Build 與 Deploy 分離 |
+| **ConfigMap 作為版本閘門** | `current_image` 由 CD 更新 | 等同 GitOps 中「Git 是唯一事實來源」的概念，差異在於用 ConfigMap 取代 Git repo，適合動態 Job 系統 |
+| **排程讀 ConfigMap 決定版本** | Prefect 每次觸發前讀 CM | 符合「Runtime 配置與程式碼分離」的 12-Factor App 原則（Factor III: Config） |
+| **SEP 不介入版本邏輯** | SEP 只接受 image 並建 Job | 符合單一職責原則（SRP），SEP 是基礎設施層，不應耦合業務版本邏輯 |
+
+#### ⚠️ 與純 GitOps 的差異（非缺點，是刻意取捨）
+
+純 GitOps（如 Argo CD）的做法是：CD 更新 Git repo 中的 `values.yaml` image tag → Argo CD 偵測到 Git 變更 → 自動 sync 部署。
+
+你的做法改用 **ConfigMap 作為版本狀態儲存**，主要原因是：
+
+- SEP 建立的是**動態 Job**，不是固定 Deployment
+- Job 的 image 由呼叫端即時傳入，不存在「一個固定部署版本」的概念
+- 來源系統可能有多個版本同時跑（不同 task_id），Deployment 模型不適用
+
+**結論：你的設計對 Dynamic Job 場景是正確且務實的做法。** 業界類似案例包括 Argo Workflows、Prefect Agent 等動態任務平台，均採用呼叫端決定 image 的模式，搭配 CI/CD 管控 image tag 的變更時機。
+
+---
+
+### 六、快速驗證 Checklist（新系統接入時使用）
+
+```bash
+# ✅ 1. 確認 image tag 非 mutable
+echo $IMAGE_TAG | grep -E "^.+:(git-[a-f0-9]|v[0-9]+\.[0-9]+|sha256)" || echo "❌ Tag 格式不符規範"
+
+# ✅ 2. 確認來源系統 ConfigMap 存在
+kubectl get configmap <your-app-config> -n <your-namespace>
+
+# ✅ 3. 確認 SEP system_id 已在配額表註冊
+kubectl get configmap sep-system-quotas -n ns-sep-stg -o jsonpath='{.data}'
+
+# ✅ 4. 試打 /api/run 確認 Job 正常建立
+curl -s -X POST http://sep-engine-svc:8080/api/run \
+  -H "Content-Type: application/json" \
+  -d "{\"system_id\":\"<your-system-id>\",\"task_id\":\"test-001\",\"image\":\"$IMAGE_TAG\",\"command\":[\"echo\",\"hello\"]}"
+```
