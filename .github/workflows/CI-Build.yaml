@@ -46,4 +46,4 @@ jobs:
           push: true
           # ghcr.io/Jefflin0225/stg:sep-engine:abc123
           # ghcr.io/Jefflin0225/main:sep-engine:abc123
-          tags: ghcr.io/jefflin0225/${{ inputs.branch }}:sep-engine:${{ github.sha }}
+          tags: ghcr.io/jefflin0225/${{ inputs.branch }}/sep-engine:${{ github.sha }}
