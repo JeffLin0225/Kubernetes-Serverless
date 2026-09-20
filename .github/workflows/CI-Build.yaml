@@ -38,7 +38,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and Push
+      - name: Build and Push [ Engine ]
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -47,3 +47,11 @@ jobs:
           # ghcr.io/Jefflin0225/stg:sep-engine:abc123
           # ghcr.io/Jefflin0225/main:sep-engine:abc123
           tags: ghcr.io/jefflin0225/${{ inputs.branch }}/sep-engine:${{ github.sha }}
+
+      - name: Build and Push [ Cleaner ]
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: services/cleaner/Dockerfile
+          push: true
+          tags: ghcr.io/jefflin0225/${{ inputs.branch }}/sep-cleaner:${{ github.sha }}
