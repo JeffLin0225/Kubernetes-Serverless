@@ -54,6 +54,18 @@ flowchart TB
 
 ---
 
+## 部署環境總覽
+
+| 環境 | 執行方式 | Image 來源 | 部署方式 | 狀態 |
+|------|---------|-----------|---------|------|
+| **dev** | 本機直接執行 `go run`，**不容器化** | — | 無需部署腳本，直接跑 | ✅ 已完成 |
+| **stg** | 容器化，部署至本機 K8s（OrbStack） | 本地 `docker build` 或 GHCR（CI 建置） | `deploy.sh`（本地build+CD）或 `deploy_github.sh`（拉 GHCR image+CD） | ✅ 已完成 |
+| **prod** | 容器化，目標全自動化 GitOps | GHCR（multi-arch, immutable tag） | ArgoCD 自動同步部署 | 🚧 規劃中，尚未實作（目前僅有 `charts/prod/values.yaml` 設定骨架） |
+
+三種環境對應三種不同成熟度的 CI/CD 思路，詳見下方「Kubernetes 叢集部署」與「CI/CD 流程」章節。
+
+---
+
 ## 專案結構
 
 ```text
@@ -99,7 +111,12 @@ flowchart TB
 ├── test/                          # 測試與開發工具
 │   └── api.http                   # IDE HTTP Client 測試檔（GoLand / VS Code REST Client）
 │
+├── .github/workflows/
+│   └── CI-Build.yaml              # 手動觸發 CI：multi-arch (amd64/arm64) build 並 push 至 GHCR
+│
 ├── flow.py                        # Prefect Flow 範例，在 K8s Pod 內執行的批次任務腳本
+├── deploy.sh                      # 本地 build + 本地部署腳本（dev 用本機直跑，stg 可用此腳本本地打包）
+├── deploy_github.sh               # 從 GHCR 拉取 CI 已建置的 image 並部署（stg 用，CD 仍為本機手動觸發）
 ├── go.mod                         # Go Module 宣告與依賴管理 (module: sep)
 └── go.sum                         # 依賴版本鎖定檔
 ```
@@ -180,9 +197,11 @@ go run ./services/cleaner
 
 ## Kubernetes 叢集部署（Helm 模式）
 
-專案內建一鍵部署腳本 `deploy.sh`，整合了 ConfigMap 同步、Helm 渲染部署與 Deployment 優雅重啟：
+專案提供兩種部署腳本，皆整合了 ConfigMap 同步、Helm 渲染部署與 Deployment 優雅重啟，差別在於 **Image 從哪裡來**：
 
-### 1. 執行部署
+### 方式 A：`deploy.sh`（本地 build，本地部署）
+不依賴 GitHub Actions，直接在本機 `docker build` 後部署，適合本機開發時快速迭代驗證：
+
 ```bash
 # 基本部署：同步 .env 至 ConfigMap 並執行 Helm upgrade/install
 ./deploy.sh stg
@@ -191,7 +210,24 @@ go run ./services/cleaner
 ./deploy.sh stg --build
 ```
 
-### 2. 服務發現與固定入口（Service 架構）
+### 方式 B：`deploy_github.sh`（拉取 GHCR image，本地部署）
+Image 由 GitHub Actions（`CI-Build.yaml`）建置並 push 到 GHCR，本機只負責 `docker pull` + Helm 部署，**不會有任何雲端 CD 連進本機**，部署動作永遠是手動在本機觸發：
+
+```bash
+# 自動抓 origin/stg 最新 commit 的 SHA 去 GHCR 拉對應 image
+./deploy_github.sh stg
+
+# 指定特定 SHA 版本部署（例如要回滾到舊版本）
+./deploy_github.sh stg 7d8e7d7e8a33fa60abaafc17d2fe1fd63d56a15e
+
+# prod 對應 CI 的 main 分支（目前僅腳本邏輯支援，叢集尚未實際上 prod）
+./deploy_github.sh prod
+```
+
+> **注意**：`deploy_github.sh` 目前只支援 `stg` / `prod`（對應 CI-Build.yaml 的 `stg` / `main` 分支）。`dev` 環境本機直接 `go run`，不透過容器部署，也不適用此腳本。
+> 詳細的 CI 建置與版本對應規則見下方「CI/CD 流程」章節。
+
+### 服務發現與固定入口（Service 架構）
 為了解決 Pod 重啟 / 滾動更新時動態 IP 變動的問題，架構在 Engine 前方配置了 Kubernetes Service（`sep-engine-svc`，類型預設為 `LoadBalancer`）：
 
 ```text
@@ -217,6 +253,52 @@ go run ./services/cleaner
   kubectl port-forward -n ns-sep-stg svc/sep-engine-svc 8080:8080
   curl http://localhost:8080/health
   ```
+
+---
+
+## CI/CD 流程（GitHub Actions → GHCR）
+
+SEP 自身（engine / cleaner）的建置與部署，目前是 **CI 自動化、CD 手動本機觸發** 的組合：GitHub Actions 只負責建置與推送 image，完全不會連進本機或叢集操作任何資源；實際部署一律由開發者在本機手動執行 `deploy_github.sh`。
+
+### 1. 觸發建置
+`.github/workflows/CI-Build.yaml` 是 `workflow_dispatch`（手動觸發，**不會**在 push 時自動執行），到 GitHub Actions 頁面手動選擇分支執行：
+
+```
+Actions → (Choose Branch) Build and Push Branch → Run workflow → 選擇 branch
+```
+
+建置完成後會同時 push 兩個 image（**multi-arch：linux/amd64 + linux/arm64**，同時支援 Intel/Cloud 環境與 Apple Silicon 本機）：
+
+```
+ghcr.io/jefflin0225/<branch>/sep-engine:<git-sha>
+ghcr.io/jefflin0225/<branch>/sep-cleaner:<git-sha>
+```
+
+### 2. 分支與部署環境的對應關係（重要）
+
+| 觸發 CI 時選的 branch | 部署環境 | 指令 |
+|---|---|---|
+| `stg` | stg | `./deploy_github.sh stg` |
+| `main` | prod（規劃中） | `./deploy_github.sh prod` |
+
+**觸發 CI 時選的 branch，必須跟要部署的環境一致**——branch 同時決定了「編譯哪個版本的原始碼」與「GHCR image tag 的路徑前綴」。選錯 branch（例如要部署 stg 卻選了 main）會導致 `deploy_github.sh` 去抓的 GHCR 路徑跟 SHA 完全對不上，pull 時會出現 `not found`。
+
+### 3. Multi-arch 建置與跨平台編譯優化
+`CI-Build.yaml` 使用 `docker/setup-qemu-action` + `docker/setup-buildx-action`，讓 amd64 runner 也能建出 arm64 image。為了避免 Go 編譯這種吃 CPU 的步驟被 QEMU 模擬拖慢（emulated 編譯可能慢 5~20 倍），兩個 Dockerfile 的 builder stage 都用 `--platform=$BUILDPLATFORM` 固定在 runner 原生架構上執行，改用 Go 原生跨平台編譯（`GOOS=$TARGETOS GOARCH=$TARGETARCH`）產生目標架構的執行檔，只有最後複製檔案的 runtime stage 才切換架構：
+
+```dockerfile
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS builder
+...
+ARG TARGETOS
+ARG TARGETARCH
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /app/engine-bin ./services/engine
+```
+
+### 4. GHCR 存取權限
+若 `docker pull` 出現 `unauthorized` / `denied`，代表 GHCR package 為 private，需先 `docker login ghcr.io -u <github帳號>`（用有 `read:packages` 權限的 PAT）；若是 `not found`，通常是該 SHA 還沒手動觸發過 CI 建置（見上方分支對應規則）。
+
+### 5. Roadmap：prod 走 ArgoCD 全自動化 GitOps
+目前 `stg` 的 CD（`helm upgrade`）仍是本機手動執行，`prod` 環境規劃導入 **ArgoCD**，改為標準 GitOps 流程（Git 上的 Helm values 變更 → ArgoCD 自動偵測並同步部署），屆時 CI 建置完成後只需更新 `charts/prod/values.yaml` 的 image tag 並 push，部署即可自動完成，不再需要手動跑部署腳本。此項目尚未實作，目前僅有 `charts/prod/values.yaml` 設定骨架。
 
 ---
 
