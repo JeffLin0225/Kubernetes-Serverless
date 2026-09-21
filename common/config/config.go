@@ -3,6 +3,7 @@ package config
 import (
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -24,8 +25,9 @@ type EngineConfig struct {
 
 // CleanerConfig - SEP 異常 Pod 收割微服務專屬配置
 type CleanerConfig struct {
-	TargetNamespace string
-	ScanInterval    time.Duration
+	TargetNamespace      string
+	ScanInterval         time.Duration
+	NormalWaitingReasons []string // 正常啟動過程中的 Waiting 狀態白名單，不在此清單中的一律視為異常
 }
 
 // LoadEngineConfig 專門載入 Engine 微服務設定
@@ -79,8 +81,9 @@ func loadCleanerConfig() CleanerConfig {
 	}
 
 	return CleanerConfig{
-		TargetNamespace: targetNamespace,
-		ScanInterval:    getDurationEnv("SCAN_INTERVAL", 5*time.Second),
+		TargetNamespace:      targetNamespace,
+		ScanInterval:         getDurationEnv("SCAN_INTERVAL", 5*time.Second),
+		NormalWaitingReasons: getSliceEnv("NORMAL_WAITING_REASONS", []string{"ContainerCreating", "PodInitializing"}),
 	}
 }
 
@@ -105,4 +108,23 @@ func getDurationEnv(key string, defaultVal time.Duration) time.Duration {
 		return defaultVal
 	}
 	return d
+}
+
+// getSliceEnv 取得逗號分隔的字串陣列型別環境變數
+func getSliceEnv(key string, defaultVal []string) []string {
+	val := os.Getenv(key)
+	if val == "" {
+		return defaultVal
+	}
+	parts := strings.Split(val, ",")
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			result = append(result, p)
+		}
+	}
+	if len(result) == 0 {
+		return defaultVal
+	}
+	return result
 }

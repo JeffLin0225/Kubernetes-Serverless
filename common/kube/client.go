@@ -27,6 +27,11 @@ func NewKubeClient() (*kubernetes.Clientset, error) {
 	// 設定 Client 連線超時時間，避免 K8s API Server 連線異常時無限制掛住
 	k8sConfig.Timeout = 10 * time.Second
 
+	// client-go 預設 QPS=5 / Burst=10 是給「一堆 controller 共用同個叢集」情境的保守值。
+	// 這支 clientset 只給 cleaner 這一支微服務用，拉高上限避免異常事故時大量刪除操作被自己的限速器卡住。
+	k8sConfig.QPS = 20
+	k8sConfig.Burst = 40
+
 	clientSet, err := kubernetes.NewForConfig(k8sConfig)
 	if err != nil {
 		return nil, fmt.Errorf("建立 Kubernetes Clientset 失敗: %w", err)
