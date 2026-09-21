@@ -11,25 +11,24 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-// 判定為不可逆啟動失敗的狀態清單
-var fatalReasons = map[string]bool{
-	"ErrImageNeverPull":          true, // 本地無 Image 且不允許連外下載
-	"ImagePullBackOff":           true, // 抓不到 Image 不斷重試
-	"InvalidImageName":           true, // Image 名稱不合法
-	"CreateContainerConfigError": true, // 容器設定異常
-}
-
 type CleanerService struct {
-	client    *kubernetes.Clientset
-	namespace string
-	interval  time.Duration
+	client               *kubernetes.Clientset
+	namespace            string
+	interval             time.Duration
+	normalWaitingReasons map[string]bool // 正常啟動過程中的 Waiting 狀態白名單，不在此清單中的一律視為異常（來自 .env 的 NORMAL_WAITING_REASONS）
 }
 
 func NewCleanerService(cfg *config.CleanerConfig, client *kubernetes.Clientset) *CleanerService {
+	normalWaitingReasons := make(map[string]bool, len(cfg.NormalWaitingReasons))
+	for _, reason := range cfg.NormalWaitingReasons {
+		normalWaitingReasons[reason] = true
+	}
+
 	return &CleanerService{
-		client:    client,
-		namespace: cfg.TargetNamespace,
-		interval:  cfg.ScanInterval,
+		client:               client,
+		namespace:            cfg.TargetNamespace,
+		interval:             cfg.ScanInterval,
+		normalWaitingReasons: normalWaitingReasons,
 	}
 }
 
@@ -64,6 +63,9 @@ func (s *CleanerService) scanAndClean(parentCtx context.Context) {
 	// （相當於 SQL 的 WHERE 條件 或 kubectl 指令的篩選參數）
 	listOptions := metav1.ListOptions{
 		LabelSelector: "app.kubernetes.io/managed-by=sep-engine",
+		// 走 apiserver 本地 watch cache 讀取，不直接打 etcd quorum read。
+		// 巡檢本來就是每隔一段時間跑一次，晚個幾百毫秒的資料無感，換取大幅降低 etcd/apiserver 負擔。
+		ResourceVersion: "0",
 	}
 
 	pods, err := s.client.CoreV1().Pods(s.namespace).List(ctx, listOptions)
@@ -76,7 +78,7 @@ func (s *CleanerService) scanAndClean(parentCtx context.Context) {
 	for _, pod := range pods.Items { // range 會同時回傳 兩個值：第一個是索引（0, 1, 2...），第二個是元素實體（pod）
 		// 檢查每個容器的狀態
 		for _, cs := range pod.Status.ContainerStatuses { // ContainerStatuses 是一個陣列，代表這個 Pod 裡面所有容器的執行狀態。 (cs 是 ContainerStatus 的縮寫。)
-			if cs.State.Waiting != nil && fatalReasons[cs.State.Waiting.Reason] { // 如果 cs.State.Waiting.Reason 是 "ErrImageNeverPull"，查出來就是 true；如果是普通的 "ContainerCreating"，查出來就是預設值 false。
+			if cs.State.Waiting != nil && !s.normalWaitingReasons[cs.State.Waiting.Reason] { // 只要不是白名單內的正常等待狀態（如 ContainerCreating），一律視為異常。
 				cleanedCount++
 				reason := cs.State.Waiting.Reason
 				systemID := pod.Labels["system_id"]
