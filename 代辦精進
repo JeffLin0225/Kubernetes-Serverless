@@ -51,3 +51,12 @@ cron 探針服務就好
 ConfigMap 配額 In-Memory 快取 / Informer 機制
 - 問題：目前在 resolveSystemResources 中，每次收到 /api/run 請求都會發出 Get ConfigMap 呼叫，高並發時會對 kube-apiserver 造成壓力與額外延遲。
 - 改善：引入 In-Memory 快取（TTL Cache）或利用 client-go Informer / Watcher 監聽 ConfigMap 異動事件，即時更新本地配額快取。
+
+6.
+
+補強健康檢查機制（Health Check + K8s 原生探針）
+- 問題：`services/engine/controller/health.go` 目前固定回傳 `{"status":"OK"}`，不檢查任何內部狀態（例如與 K8s apiserver 的連線、ConfigMap 讀取是否正常），engine 內部真的出問題時 `/health` 仍會回 200。另外 `charts/` 目前完全沒有設定 `livenessProbe` / `readinessProbe`。
+- 解法：
+  - 在 `health.go` 補上真實健康判斷（至少檢查 K8s client 是否能連上 apiserver）。
+  - 在 Helm chart 的 Deployment template 補上 `livenessProbe`（存活探測，失敗重啟容器）與 `readinessProbe`（就緒探測，失敗只從 Service endpoints 移除、不重啟），交給 K8s 原生機制處理，不要自己另外做一個 cron 探針服務打自己（服務自己掛了會沒辦法回應自己的健康檢查，這是反模式）。
+  - 若需要「服務掛了要告警通知」，應接 Prometheus/Alertmanager 等外部系統監控 Pod restart 次數，而非服務內部自建 loop。
