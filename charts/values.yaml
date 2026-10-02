@@ -29,6 +29,12 @@ quotas:
       memory_request: "4Gi"
       cpu_limit: "4000m"
       memory_limit: "8Gi"
+    # demo-go 來源系統（展示用批次：emailbatch / linebatch / errorbatch）
+    demo-go:
+      cpu_request: "100m"
+      memory_request: "128Mi"
+      cpu_limit: "250m"
+      memory_limit: "256Mi"
 
 # ========================================
 #  3. SEP Engine 微服務配置
