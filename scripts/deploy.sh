@@ -2,13 +2,15 @@
 # ============================================================
 # SEP (Serverless Execution Platform) - 部署自動化腳本
 # 用法:
-#   ./deploy.sh [stg|dev|prod] [--build]
+#   ./scripts/deploy.sh [stg|dev|prod] [--build]
 #   例如:
-#     ./deploy.sh stg          # 僅更新 ConfigMap 並執行 Helm 部署
-#     ./deploy.sh stg --build  # 包含本地 Docker Image 重新打包
+#     ./scripts/deploy.sh stg          # 僅更新 ConfigMap 並執行 Helm 部署
+#     ./scripts/deploy.sh stg --build  # 包含本地 Docker Image 重新打包
 # ============================================================
 
 set -e
+
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 ENV=${1:-stg}
 BUILD_FLAG=$2
@@ -47,7 +49,7 @@ if [ "$BUILD_FLAG" == "--build" ]; then
   docker build --no-cache -t "sep-cleaner:${ENV}" -f services/cleaner/Dockerfile .
   echo "✅ [CI] Docker 打包完成！"
 else
-  echo "⏩ [CI] 跳過 Docker 打包（若需要重新打包請加參數: ./deploy.sh ${ENV} --build）"
+  echo "⏩ [CI] 跳過 Docker 打包（若需要重新打包請加參數: ./scripts/deploy.sh ${ENV} --build）"
 fi
 
 # ============================================================
