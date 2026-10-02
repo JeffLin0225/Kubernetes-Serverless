@@ -2,6 +2,10 @@
 
 **SEP (Serverless Execution Platform)** 是一個輕量、高擴展的 Kubernetes 批次任務執行平台。系統接收來自 Prefect 或外部排程系統的任務請求，動態在 K8s 叢集上建立隔離的批次 Job 執行；並內建獨立的異常死 Pod 自動收割監控微服務（Pod Cleaner），主動偵測不可逆錯誤並即刻釋放叢集 CPU 與記憶體配額。
 
+> **參考實作（來源系統）**：[Demo-Golang](https://github.com/JeffLin0225/Demo-Golang) —— 一個實際接入 SEP 的來源系統，
+> 完整實作了下方「[來源系統接入規範](#來源系統接入規範source-system-integration-spec)」要求的 immutable tag 與版本閘門機制。
+> 可作為新系統接入時的對照範本。
+
 ---
 
 ## 系統架構
@@ -449,6 +453,9 @@ kubectl get rolebinding,clusterrolebinding | grep sep-engine
 
 > 本章節定義所有接入 SEP 的來源系統（如爬蟲、報表、分析等）在 CI/CD 流程與 Image 管理上必須遵守的設計規範。
 > SEP Engine 完全信任來源端傳入的 `image` 欄位，因此**版本安全閘門的責任在來源端**，而非 SEP。
+>
+> **已接入的來源系統**：[Demo-Golang](https://github.com/JeffLin0225/Demo-Golang)（`system_id: demo-go`）——
+> 本規範的實作範例，可直接參照其 `scripts/` 與 README 的 CI/CD 策略章節。詳見本章末「[參考實作](#參考實作demo-golang)」。
 
 ---
 
@@ -644,3 +651,42 @@ curl -s -X POST http://sep-engine-svc:8080/api/run \
   -H "Content-Type: application/json" \
   -d "{\"system_id\":\"<your-system-id>\",\"task_id\":\"test-001\",\"image\":\"$IMAGE_TAG\",\"command\":[\"echo\",\"hello\"]}"
 ```
+
+---
+
+### 參考實作：Demo-Golang
+
+[**JeffLin0225/Demo-Golang**](https://github.com/JeffLin0225/Demo-Golang) 是目前唯一已完整接入的來源系統，可作為新系統的對照範本。
+
+| 項目 | 內容 |
+|------|------|
+| `system_id` | `demo-go`（已在 `sep-system-quotas` 註冊 4 個配額 key） |
+| Namespace | `ns-demo-go-stg`（與 `ns-sep-stg` 隔離，Job 配額算在來源系統自己頭上） |
+| 對外介面 | `POST /api/callsep`，由呼叫端以 `batch_kind` 指定要跑哪一支批次 |
+| 批次 workload | `emailbatch` / `linebatch` / `errorbatch`（第三支故意失敗，用於測試 Job 失敗行為） |
+| Image tag | `git-<short_sha>`，只推 immutable tag，刻意不推 `:latest` |
+
+**它如何滿足本規範：**
+
+| 本規範要求 | Demo-Golang 的實作 |
+|-----------|-------------------|
+| 禁用 mutable tag | CI 的 tag 一律由 `git rev-parse --short HEAD` 推導，腳本層級拒絕外部指定 tag |
+| 版本閘門由 CD 更新，CI 嚴禁碰 | 閘門是 Deployment 的 `BATCH_IMAGE_*` 環境變數，只有 `scripts/cd.sh` 的 `kubectl set env` 會寫 |
+| CI / CD 職責分離 | `ci.sh` 只建置並寫出「CI 產出紀錄」；`cd.sh` 只讀該紀錄部署，**不自己推導版本** |
+
+> **與本規範的一處差異**：本規範建議用來源端 ConfigMap 的 `current_image` 當版本閘門，
+> Demo-Golang 改用 **Deployment 的環境變數**，並把「CI 建了什麼」另外寫成一份**叢集外**的
+> 產出紀錄（對應 CI 平台的 pipeline artifact）。
+>
+> 兩者都滿足核心原則「閘門只由 CD 更新、CI 嚴禁碰」，差異在於它刻意讓 CI 的產出紀錄
+> **放在叢集外**：runtime 結構上讀不到，而不是靠紀律約束。這也避免了 CI 階段必須持有
+> 叢集憑證（寫 ConfigMap 就需要），守住「CI 只有 registry push 權限、叢集憑證只給 CD」
+> 的權限邊界。
+
+**已驗證的接入行為：**
+
+| 驗證項目 | 結果 |
+|---------|------|
+| CI 跑完、CD 未跑時觸發批次 | 跑舊版 image —— CI 的產出紀錄沒有洩漏到 runtime |
+| CD 跑完後觸發批次 | 跑新版 image —— 版本閘門正確翻轉 |
+| Cleaner 收割異常 Pod | 送不存在的 image → Pod 卡在 `ErrImageNeverPull` → 一個巡檢週期內告警並刪除 Job，配額釋放 |
