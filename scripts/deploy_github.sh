@@ -2,19 +2,21 @@
 # ============================================================
 # SEP (Serverless Execution Platform) - GHCR 部署腳本
 # 用法:
-#   ./deploy_github.sh [stg|prod] [sha]
+#   ./scripts/deploy_github.sh [stg|prod] [sha]
 #   例如:
-#     ./deploy_github.sh stg                                    # 自動抓 origin/stg 最新 commit 的 image
-#     ./deploy_github.sh stg 7d8e7d7e8a33fa60abaafc17d2fe1fd63d56a15e  # 指定特定 SHA 版本
+#     ./scripts/deploy_github.sh stg                                    # 自動抓 origin/stg 最新 commit 的 image
+#     ./scripts/deploy_github.sh stg 7d8e7d7e8a33fa60abaafc17d2fe1fd63d56a15e  # 指定特定 SHA 版本
 #
 # 職責：從 GHCR 拉取 CI（CI-Build.yaml）已建置好的 Image，部署到本機 K8s 叢集
 #       不會 docker build 任何東西，也不會有任何雲端 CD 連進本機
-#       （本機叢集僅能手動觸發部署，見 deploy.sh 內的說明）
+#       （本機叢集僅能手動觸發部署，見 scripts/deploy.sh 內的說明）
 #
-# 注意：dev 環境沒有對應的 CI 建置分支，請改用 ./deploy.sh dev --build
+# 注意：dev 環境沒有對應的 CI 建置分支，請改用 ./scripts/deploy.sh dev --build
 # ============================================================
 
 set -e
+
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 ENV=${1:-stg}
 SHA=$2
@@ -32,7 +34,7 @@ case "$ENV" in
   prod) BRANCH="main" ;;
   *)
     echo "❌ [Error] 此腳本僅支援 stg / prod（對應 CI-Build.yaml 的 stg / main 分支）"
-    echo "本地開發請改用: ./deploy.sh dev --build"
+    echo "本地開發請改用: ./scripts/deploy.sh dev --build"
     exit 1
     ;;
 esac
