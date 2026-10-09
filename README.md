@@ -10,6 +10,10 @@
 
 ## 系統架構
 
+[![查看互動架構圖](https://img.shields.io/badge/📐%20互動架構圖-點此開啟新分頁-6366F1?style=for-the-badge)](https://pub-05c62739ac6f4499a3401b26d0e9faaf.r2.dev/img/serverless/sep-runtime.html)
+
+> 獨立單檔 HTML（內嵌 SVG，支援深/淺色主題與匯出），託管於 CDN。圖中呈現 9 個核心元件、一條主鏈路（Caller → Service → Engine → K8s API → Job → Pod）、外部依賴（Prefect 呼叫端、GHCR Image Registry）與叢集信任邊界，Cleaner 收割迴圈與交付流程以卡片補充說明。
+
 ```mermaid
 flowchart TB
     %% 樣式定義
