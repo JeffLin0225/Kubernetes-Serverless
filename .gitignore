@@ -1,0 +1,6 @@
+.env
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+services/engine/engine
