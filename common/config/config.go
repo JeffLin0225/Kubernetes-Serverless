@@ -17,17 +17,31 @@ type Config struct {
 
 // EngineConfig - SEP Engine (Serverless Execution Platform) 微服務專屬配置
 type EngineConfig struct {
+	Platform        string // 任務執行平台：k8s（預設）或 cloudrun
 	Namespace       string
 	Port            string
 	ImagePullPolicy string
 	SystemQuotasCM  string // 配額 ConfigMap 名稱
+
+	// 以下為 Cloud Run 模式專用
+	GCPProject           string
+	GCPRegion            string
+	TaskServiceAccount   string   // 任務容器使用的 Service Account email
+	SystemQuotasJSON     string   // 配額表（JSON），取代 ConfigMap
+	AllowedImagePrefixes []string // 任務 image 白名單前綴
 }
 
 // CleanerConfig - SEP 異常 Pod 收割微服務專屬配置
 type CleanerConfig struct {
+	Platform             string // 任務執行平台：k8s（預設）或 cloudrun
 	TargetNamespace      string
 	ScanInterval         time.Duration
 	NormalWaitingReasons []string // 正常啟動過程中的 Waiting 狀態白名單，不在此清單中的一律視為異常
+
+	// 以下為 Cloud Run 模式專用
+	GCPProject   string
+	GCPRegion    string
+	JobRetention time.Duration // 任務 job 跑完後保留多久才刪除
 }
 
 // LoadEngineConfig 專門載入 Engine 微服務設定
@@ -64,10 +78,17 @@ func LoadCleanerConfig() *CleanerConfig {
 
 func loadEngineConfig() EngineConfig {
 	return EngineConfig{
+		Platform:        getEnv("PLATFORM", "k8s"),
 		Namespace:       getEnv("NAMESPACE", "ns-sep"),
 		Port:            getEnv("PORT", "8080"),
 		ImagePullPolicy: getEnv("IMAGE_PULL_POLICY", "Never"),
 		SystemQuotasCM:  getEnv("SYSTEM_QUOTAS_CONFIGMAP", "sep-system-quotas"),
+
+		GCPProject:           getEnv("GCP_PROJECT", ""),
+		GCPRegion:            getEnv("GCP_REGION", ""),
+		TaskServiceAccount:   getEnv("TASK_SERVICE_ACCOUNT", ""),
+		SystemQuotasJSON:     getEnv("SYSTEM_QUOTAS_JSON", "{}"),
+		AllowedImagePrefixes: getSliceEnv("ALLOWED_IMAGE_PREFIXES", nil),
 	}
 }
 
@@ -81,9 +102,14 @@ func loadCleanerConfig() CleanerConfig {
 	}
 
 	return CleanerConfig{
+		Platform:             getEnv("PLATFORM", "k8s"),
 		TargetNamespace:      targetNamespace,
 		ScanInterval:         getDurationEnv("SCAN_INTERVAL", 5*time.Second),
 		NormalWaitingReasons: getSliceEnv("NORMAL_WAITING_REASONS", []string{"ContainerCreating", "PodInitializing"}),
+
+		GCPProject:   getEnv("GCP_PROJECT", ""),
+		GCPRegion:    getEnv("GCP_REGION", ""),
+		JobRetention: getDurationEnv("JOB_RETENTION", 5*time.Minute),
 	}
 }
 

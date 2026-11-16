@@ -4,3 +4,4 @@
 *.tfstate.*
 terraform.tfvars
 services/engine/engine
+.DS_Store

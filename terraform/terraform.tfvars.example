@@ -1,0 +1,18 @@
+# 複製成 terraform.tfvars 後填入自己的值。terraform.tfvars 不進 git。
+project_id = "your-project-id"
+
+# 以下都有預設值，要改再取消註解
+# region = "asia-east1"
+
+# system_quotas = {
+#   demo-go = {
+#     cpu    = "1"
+#     memory = "512Mi"
+#   }
+# }
+
+# 測試時要用 Google 官方範例 job image，就加這一行
+# extra_allowed_image_prefixes = ["us-docker.pkg.dev/cloudrun/container/"]
+
+# job_retention    = "5m"
+# cleaner_schedule = "0 * * * *"

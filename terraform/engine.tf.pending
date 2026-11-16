@@ -1,0 +1,80 @@
+variable "image_tag" {
+  description = "要部署的 image tag（部署時傳入 git short sha）"
+  type        = string
+}
+
+resource "google_cloud_run_v2_service" "engine" {
+  name     = "sep-engine"
+  location = var.region
+
+  # 預設是 true，會讓 terraform destroy 失敗
+  deletion_protection = false
+
+  # 網路上可以連到，但沒有 IAM 權限的請求會被 Cloud Run 擋下（403）
+  # 這個檔案裡「沒有」任何 allUsers 的 IAM 綁定，所以是不公開的
+  ingress = "INGRESS_TRAFFIC_ALL"
+
+  template {
+    service_account = google_service_account.engine.email
+
+    scaling {
+      min_instance_count = 0
+      max_instance_count = 2
+    }
+
+    containers {
+      image = "${local.repo_url}/sep-engine:${var.image_tag}"
+
+      resources {
+        limits = {
+          cpu    = "1"
+          memory = "512Mi"
+        }
+      }
+
+      # PORT 不能自己設，Cloud Run 會自動注入（8080）
+      env {
+        name  = "PLATFORM"
+        value = "cloudrun"
+      }
+      env {
+        name  = "GIN_MODE"
+        value = "release"
+      }
+      env {
+        name  = "GCP_PROJECT"
+        value = var.project_id
+      }
+      env {
+        name  = "GCP_REGION"
+        value = var.region
+      }
+      env {
+        name  = "TASK_SERVICE_ACCOUNT"
+        value = google_service_account.task.email
+      }
+      env {
+        name  = "SYSTEM_QUOTAS_JSON"
+        value = jsonencode(var.system_quotas)
+      }
+      env {
+        name  = "ALLOWED_IMAGE_PREFIXES"
+        value = join(",", local.allowed_image_prefixes)
+      }
+
+      startup_probe {
+        http_get {
+          path = "/health"
+        }
+        period_seconds    = 3
+        failure_threshold = 10
+      }
+    }
+  }
+
+  # 權限要先到位，Engine 一啟動才能用
+  depends_on = [
+    google_project_iam_member.engine_run_developer,
+    google_service_account_iam_member.engine_act_as_task,
+  ]
+}

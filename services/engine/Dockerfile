@@ -1,7 +1,7 @@
 # 階段 1：編譯環境
 # --platform=$BUILDPLATFORM：永遠用 runner 原生架構跑編譯器，改用 Go 原生跨平台編譯
 # 而不是靠 QEMU 模擬整個 arm64 環境（避免 go build 在模擬 CPU 下慢 5~20 倍）
-FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
 
 WORKDIR /app
 
