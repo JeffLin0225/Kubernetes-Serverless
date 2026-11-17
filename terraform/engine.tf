@@ -30,6 +30,9 @@ resource "google_cloud_run_v2_service" "engine" {
           cpu    = "1"
           memory = "512Mi"
         }
+        # 只在處理請求時分配 CPU（以請求計費）。
+        # 有寫 limits 時 provider 會把它預設成 false（CPU 常駐、以執行個體計費），所以要明確設定
+        cpu_idle = true
       }
 
       # PORT 不能自己設，Cloud Run 會自動注入（8080）
