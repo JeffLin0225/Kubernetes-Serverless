@@ -1,0 +1,76 @@
+resource "google_cloud_run_v2_job" "cleaner" {
+  name     = "sep-cleaner"
+  location = var.region
+
+  deletion_protection = false
+
+  # 外層 template 是「execution 的設定」，內層 template 是「每個 task（容器）的設定」
+  template {
+    template {
+      service_account = google_service_account.cleaner.email
+      max_retries     = 0
+      timeout         = "120s"
+
+      containers {
+        image = "${local.repo_url}/sep-cleaner:${var.image_tag}"
+
+        resources {
+          limits = {
+            cpu    = "1"
+            memory = "512Mi"
+          }
+        }
+
+        env {
+          name  = "PLATFORM"
+          value = "cloudrun"
+        }
+        env {
+          name  = "GCP_PROJECT"
+          value = var.project_id
+        }
+        env {
+          name  = "GCP_REGION"
+          value = var.region
+        }
+        env {
+          name  = "JOB_RETENTION"
+          value = var.job_retention
+        }
+      }
+    }
+  }
+
+  depends_on = [google_project_iam_member.cleaner_run_developer]
+}
+
+# Scheduler 只能觸發 cleaner 這一個 job（資源層級的權限，不是專案層級）
+resource "google_cloud_run_v2_job_iam_member" "scheduler_invoke_cleaner" {
+  name     = google_cloud_run_v2_job.cleaner.name
+  location = google_cloud_run_v2_job.cleaner.location
+  role     = "roles/run.invoker"
+  member   = google_service_account.scheduler.member
+}
+
+resource "google_cloud_scheduler_job" "cleaner" {
+  name      = "sep-cleaner-trigger"
+  region    = var.region
+  schedule  = var.cleaner_schedule
+  time_zone = "Asia/Taipei"
+
+  retry_config {
+    retry_count = 0
+  }
+
+  # Scheduler 用 sep-scheduler 的身分，呼叫 Cloud Run Admin API 的「執行 job」端點
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.project_id}/locations/${var.region}/jobs/${google_cloud_run_v2_job.cleaner.name}:run"
+
+    oauth_token {
+      service_account_email = google_service_account.scheduler.email
+    }
+  }
+
+  depends_on = [google_cloud_run_v2_job_iam_member.scheduler_invoke_cleaner]
+}

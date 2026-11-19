@@ -3,14 +3,13 @@ package router
 import (
 	"os"
 
-	"sep/common/config"
 	"sep/services/engine/controller"
 	"sep/services/engine/service"
 
 	"github.com/gin-gonic/gin"
 )
 
-func SetupRouter(cfg *config.EngineConfig, jobLauncher *service.JobLauncher) *gin.Engine {
+func SetupRouter(launcher service.Launcher) *gin.Engine {
 	// 根據 GIN_MODE 切換模式
 	if os.Getenv("GIN_MODE") == "release" {
 		gin.SetMode(gin.ReleaseMode)
@@ -22,7 +21,7 @@ func SetupRouter(cfg *config.EngineConfig, jobLauncher *service.JobLauncher) *gi
 	// 關閉信任所有代理 (消除安全警告，直連模式)
 	_ = r.SetTrustedProxies(nil)
 
-	runCtrl := controller.NewRunController(jobLauncher)
+	runCtrl := controller.NewRunController(launcher)
 
 	// 註冊路由群組
 	r.GET("/health", controller.HealthCheck)

@@ -1,0 +1,56 @@
+# 放在 repo 根目錄。用 --no-source 執行，Cloud Build 自己從 GitHub（public repo，免憑證）clone 程式碼：
+#   gcloud builds submit --no-source --config cloudbuild.yaml \
+#     --service-account "projects/<PROJECT_ID>/serviceAccounts/sep-builder@<PROJECT_ID>.iam.gserviceaccount.com" \
+#     --substitutions _BRANCH=main
+# 不設 trigger，由人手動執行。image tag 是 clone 下來那個 commit 的 short sha。
+steps:
+  # 1. 只抓指定分支的最新一次 commit，並把 short sha 記下來給後面的 step 當 image tag
+  - id: clone
+    name: gcr.io/cloud-builders/git
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        git clone --depth 1 --branch ${_BRANCH} ${_REPO_URL} src
+        git -C src rev-parse --short HEAD > /workspace/sha
+        echo "build commit: $$(cat /workspace/sha)"
+
+  # 2. 建 engine 並 push。tag 要等 clone 完才知道，所以不能用頂層的 images 欄位，改在 step 內 push
+  - id: build-engine
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    dir: src
+    # Dockerfile 用了 --platform=$BUILDPLATFORM 和 TARGETOS / TARGETARCH，
+    # 這些變數只有 BuildKit 會自動填入，沒開的話 build 會直接失敗
+    env:
+      - DOCKER_BUILDKIT=1
+    args:
+      - -c
+      - |
+        IMG=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/sep-engine:$$(cat /workspace/sha)
+        docker build -f services/engine/Dockerfile -t $$IMG .
+        docker push $$IMG
+
+  # 3. 建 cleaner 並 push
+  - id: build-cleaner
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    dir: src
+    env:
+      - DOCKER_BUILDKIT=1
+    args:
+      - -c
+      - |
+        IMG=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/sep-cleaner:$$(cat /workspace/sha)
+        docker build -f services/cleaner/Dockerfile -t $$IMG .
+        docker push $$IMG
+
+substitutions:
+  _REGION: asia-east1
+  _REPO: sep
+  _BRANCH: main
+  _REPO_URL: https://github.com/JeffLin0225/Kubernetes-Serverless.git
+
+options:
+  # 指定自訂 Service Account 時必須設定 log 去向，否則 submit 會被拒絕
+  logging: CLOUD_LOGGING_ONLY
