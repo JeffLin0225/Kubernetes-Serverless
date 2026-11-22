@@ -1,18 +1,21 @@
 # 複製成 terraform.tfvars 後填入自己的值。terraform.tfvars 不進 git。
 project_id = "your-project-id"
 
-# 以下都有預設值，要改再取消註解
-# region = "asia-east1"
+# region = "asia-east1"   # 有預設值，要改再取消註解
 
-# system_quotas = {
-#   demo-go = {
-#     cpu    = "1"
-#     memory = "512Mi"
-#   }
-# }
+# ---- 可以呼叫 /api/run 建立 job 的規則 ----
+# 哪些來源系統可以用、各能用多少資源。沒列在這裡的系統一律拒絕
+system_quotas = {
+  demo-go = {
+    cpu    = "1"
+    memory = "512Mi"
+  }
+}
 
-# 測試時要用 Google 官方範例 job image，就加這一行
-# extra_allowed_image_prefixes = ["us-docker.pkg.dev/cloudrun/container/"]
+# 允許的任務 image 前綴。
+#自己的 Artifact Registry（…/sep/）一定允許，不用列
+# 測試時要用 Google 官方範例 job image，就加 "us-docker.pkg.dev/cloudrun/container/"
+extra_allowed_image_prefixes = ["us-docker.pkg.dev/cloudrun/container/"]
 
 # job_retention    = "5m"
 # cleaner_schedule = "0 * * * *"

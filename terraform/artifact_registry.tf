@@ -23,3 +23,28 @@ resource "google_artifact_registry_repository" "sep" {
     }
   }
 }
+
+resource "google_artifact_registry_repository" "demo_go" {
+  location      = var.region
+  repository_id = "demo-go"
+  format        = "DOCKER"
+  description   = "demo-go 系統的批次 images"
+
+  # 規則同 sep：超過 1 天的舊 image 刪除，每個 image 名稱保留最新 3 版
+  cleanup_policies {
+    id     = "delete-old"
+    action = "DELETE"
+    condition {
+      tag_state  = "ANY"
+      older_than = "86400s"
+    }
+  }
+
+  cleanup_policies {
+    id     = "keep-recent"
+    action = "KEEP"
+    most_recent_versions {
+      keep_count = 3
+    }
+  }
+}
