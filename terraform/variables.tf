@@ -17,12 +17,8 @@ variable "system_quotas" {
     cpu    = string
     memory = string
   }))
-  default = {
-    demo-go = {
-      cpu    = "1"
-      memory = "512Mi"
-    }
-  }
+  # 實際的系統清單寫在 terraform.tfvars，這裡不放任何系統
+  default = {}
 }
 
 variable "extra_allowed_image_prefixes" {
