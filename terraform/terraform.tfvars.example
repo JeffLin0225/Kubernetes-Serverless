@@ -15,7 +15,10 @@ system_quotas = {
 # 允許的任務 image 前綴。
 #自己的 Artifact Registry（…/sep/）一定允許，不用列
 # 測試時要用 Google 官方範例 job image，就加 "us-docker.pkg.dev/cloudrun/container/"
-extra_allowed_image_prefixes = ["us-docker.pkg.dev/cloudrun/container/"]
+extra_allowed_image_prefixes = [
+  "us-docker.pkg.dev/cloudrun/container/",
+  "asia-east1-docker.pkg.dev/neat-environs-463213-b6/demo-go/"
+]
 
 # job_retention    = "5m"
 # cleaner_schedule = "0 * * * *"

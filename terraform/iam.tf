@@ -36,6 +36,14 @@ resource "google_service_account_iam_member" "engine_act_as_task" {
   member             = google_service_account.engine.member
 }
 
+# Engine 建 job 時，GCP 會檢查 Engine 本身能不能讀該 image，所以要給系統 repo 的讀取權限
+resource "google_artifact_registry_repository_iam_member" "engine_reader_demo_go" {
+  location   = google_artifact_registry_repository.demo_go.location
+  repository = google_artifact_registry_repository.demo_go.name
+  role       = "roles/artifactregistry.reader"
+  member     = google_service_account.engine.member
+}
+
 # Cleaner 要能列出和刪除 Cloud Run job
 resource "google_project_iam_member" "cleaner_run_developer" {
   project = var.project_id
