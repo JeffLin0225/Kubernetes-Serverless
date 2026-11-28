@@ -5,3 +5,6 @@
 terraform.tfvars
 services/engine/engine
 .DS_Store
+
+# IDE 設定（JetBrains）
+.idea/
